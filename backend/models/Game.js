@@ -1,21 +1,25 @@
-import mongoose from 'mongoose';
-
-const moveSchema = new mongoose.Schema({
-  from: String,
-  to: String,
-  san: String,
-  color: String,
-  turn: Number,
-  createdAt: { type: Date, default: Date.now },
-});
+import mongoose from "mongoose";
 
 const gameSchema = new mongoose.Schema({
-  name: { type: String },
-  players: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  fen: { type: String, default: 'start' },
-  moves: [moveSchema],
-  status: { type: String, enum: ['waiting','playing','ended'], default: 'waiting' },
-  result: { type: String },
-}, { timestamps: true });
+  whitePlayer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Player",
+    required: true,
+  },
+  blackPlayer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Player",
+    required: true,
+  },
+  result: {
+    type: String,
+    enum: ["white", "black", "draw", "ongoing"],
+    default: "ongoing",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
 
-export default mongoose.model('Game', gameSchema);
+export default mongoose.model("Game", gameSchema);
