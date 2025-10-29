@@ -2,19 +2,24 @@ import mongoose from "mongoose";
 
 const gameSchema = new mongoose.Schema({
   whitePlayer: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed, // can be ObjectId (Player) or string like "computer"
     ref: "Player",
-    required: true,
   },
   blackPlayer: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: "Player",
-    required: true,
   },
   result: {
     type: String,
-    enum: ["white", "black", "draw", "ongoing"],
     default: "ongoing",
+  },
+  fen: {
+    type: String,
+    default: "",
+  },
+  moves: {
+    type: [String],
+    default: [],
   },
   createdAt: {
     type: Date,

@@ -1,10 +1,11 @@
 // routes/gameRoutes.js
 import express from "express";
-import { createGame, getGames } from "../controllers/gameController.js";
+import { createGame, getGames, updateGame } from "../controllers/gameController.js";
 
 const router = express.Router();
 
-router.post("/createGame", createGame);
-router.get("/getGames", getGames);
+router.post("/", createGame);
+router.get("/", getGames);
+router.put("/:id", updateGame);
 
 export default router;

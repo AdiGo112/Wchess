@@ -2,11 +2,14 @@ import Player from "../models/player.js";
 
 // Create a player
 export const createPlayer = async (req, res) => {
-    const { name, username, rating } = req.body;
-    if (!name && !rating && !username) {
-      return res.status(400).json({ message: "Name, username, and rating are required" });
-    }
+  const { name, username, rating } = req.body;
+  if (!name || !username) {
+    return res.status(400).json({ message: "Name and username are required" });
+  }
   try {
+    const existing = await Player.findOne({ username });
+    if (existing) return res.status(400).json({ message: "Username already taken" });
+
     const player = new Player({ name, username, rating });
     await player.save();
     res.status(201).json(player);

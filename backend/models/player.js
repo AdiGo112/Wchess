@@ -8,7 +8,6 @@ const playerSchema = new mongoose.Schema({
     username: {
     type: String,
     unique: true,
-    sparse: true, // allows multiple nulls
   },
   rating: {
     type: Number,
