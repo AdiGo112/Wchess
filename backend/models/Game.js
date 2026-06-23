@@ -1,30 +1,32 @@
 import mongoose from "mongoose";
 
-const gameSchema = new mongoose.Schema({
-  whitePlayer: {
-    type: mongoose.Schema.Types.Mixed, // can be ObjectId (Player) or string like "computer"
-    ref: "Player",
+const gameSchema = new mongoose.Schema(
+  {
+    playerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Player",
+      required: true,
+    },
+    opponent: {
+      type: String,
+      required: true,
+    },
+    result: {
+      type: String,
+      enum: ["Win", "Lose", "Draw"],
+      required: true,
+    },
+    moves: {
+      type: Number,
+      default: 0,
+    },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  blackPlayer: {
-    type: mongoose.Schema.Types.Mixed,
-    ref: "Player",
-  },
-  result: {
-    type: String,
-    default: "ongoing",
-  },
-  fen: {
-    type: String,
-    default: "",
-  },
-  moves: {
-    type: [String],
-    default: [],
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  { timestamps: true }
+);
 
-export default mongoose.model("Game", gameSchema);
+const Game = mongoose.model("Game", gameSchema);
+export default Game;
