@@ -1,37 +1,70 @@
-// src/pages/Game.jsx
-import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ChessGame from "../components/ChessGame";
+import { useSocket } from "../context/SocketContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function Game() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { mode, time } = location.state || {}; // passed from Home
+  const { roomId: routeRoomId } = useParams();
+  const { socket } = useSocket();
+  const { user } = useAuth();
 
-  if (!mode || !time) {
-    // If user directly enters /game URL, redirect to home
-    navigate("/");
-    return null;
-  }
+  const [roomId, setRoomId] = useState(routeRoomId || location.state?.roomId);
+  const { mode, timeControl } = location.state || {};
+
+  useEffect(() => {
+    if (!user) { navigate("/login"); return; }
+    if (!socket) return;
+
+    if (!roomId && mode === "online" && timeControl) {
+      socket.emit("join_queue", { timeControl });
+
+      socket.on("match_found", (data) => {
+        setRoomId(data.roomId);
+        socket.off("match_found");
+      });
+
+      return () => socket.off("match_found");
+    }
+
+    if (!roomId && mode === "computer" && timeControl) {
+      // Create vs-computer room
+      socket.emit("create_room", { timeControl, vsComputer: true, difficulty: 2 });
+      socket.on("room_created", (data) => {
+        setRoomId(data.roomId);
+        socket.off("room_created");
+      });
+      return () => socket.off("room_created");
+    }
+  }, [socket, user, mode, timeControl, roomId, navigate]);
+
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="w-full flex justify-between items-center px-6 py-3 bg-gray-800 shadow-md">
         <h2 className="text-xl font-bold">ChessWeb</h2>
-        <div className="flex gap-4">
-          <span className="text-gray-300">Mode: {mode}</span>
-          <span className="text-gray-300">Time: {time}</span>
-          <button
-            onClick={() => navigate("/")}
-            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
-          >
-            Exit Game
+        <div className="flex gap-4 items-center">
+          {mode && <span className="text-gray-300 capitalize">Mode: {mode}</span>}
+          {timeControl && <span className="text-gray-300">Time: {timeControl}s</span>}
+          {!roomId && <span className="text-yellow-400 animate-pulse">Finding opponent...</span>}
+          <button onClick={() => navigate("/")} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm">
+            Exit
           </button>
         </div>
       </div>
 
-      <div className="mt-10">
-        <ChessGame mode={mode} time={time} />
+      <div className="flex-1 flex items-center justify-center p-4">
+        {roomId ? (
+          <ChessGame roomId={roomId} mode={mode} timeControl={timeControl} />
+        ) : (
+          <div className="text-center">
+            <div className="animate-spin w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-gray-400">Waiting for an opponent...</p>
+          </div>
+        )}
       </div>
     </div>
   );

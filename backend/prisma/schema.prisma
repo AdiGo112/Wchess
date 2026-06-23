@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  name          String
+  passwordHash  String?
+  oauthProvider String?
+  oauthId       String?
+  emailVerified Boolean  @default(false)
+  avatarUrl     String?
+  bio           String?
+  country       String?
+  role          Role     @default(USER)
+  isActive      Boolean  @default(true)
+  isBanned      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastSeenAt    DateTime?
+
+  ratings        UserRating[]
+  gamesAsWhite   Game[]          @relation("WhitePlayer")
+  gamesAsBlack   Game[]          @relation("BlackPlayer")
+  puzzleAttempts PuzzleAttempt[]
+  tournaments    TournamentPlayer[]
+  refreshTokens  RefreshToken[]
+
+  @@index([username])
+  @@index([email])
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model UserRating {
+  id               String      @id @default(cuid())
+  userId           String
+  variant          TimeVariant
+  rating           Int         @default(1200)
+  ratingDeviation  Float       @default(350)
+  volatility       Float       @default(0.06)
+  wins             Int         @default(0)
+  losses           Int         @default(0)
+  draws            Int         @default(0)
+  provisional      Boolean     @default(true)
+  updatedAt        DateTime    @updatedAt
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, variant])
+  @@index([variant, rating(sort: Desc)])
+}
+
+enum TimeVariant {
+  BULLET
+  BLITZ
+  RAPID
+  CLASSICAL
+  CORRESPONDENCE
+  PUZZLE
+}
+
+model Game {
+  id              String      @id @default(cuid())
+  whiteId         String?
+  blackId         String?
+  whiteUsername   String
+  blackUsername   String
+  whiteRating     Int         @default(1200)
+  blackRating     Int         @default(1200)
+  whiteRatingDiff Int         @default(0)
+  blackRatingDiff Int         @default(0)
+  result          GameResult
+  reason          GameReason
+  variant         TimeVariant @default(BLITZ)
+  timeControl     Int
+  increment       Int         @default(0)
+  pgn             String      @default("")
+  fen             String?
+  moves           String[]
+  duration        Int?
+  openingEco      String?
+  openingName     String?
+  tournamentId    String?
+  createdAt       DateTime    @default(now())
+
+  whitePlayer  User?       @relation("WhitePlayer", fields: [whiteId], references: [id])
+  blackPlayer  User?       @relation("BlackPlayer", fields: [blackId], references: [id])
+  tournament   Tournament? @relation(fields: [tournamentId], references: [id])
+
+  @@index([whiteId, createdAt(sort: Desc)])
+  @@index([blackId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum GameResult {
+  WHITE
+  BLACK
+  DRAW
+  ABORTED
+}
+
+enum GameReason {
+  CHECKMATE
+  RESIGNATION
+  TIMEOUT
+  STALEMATE
+  AGREEMENT
+  INSUFFICIENT_MATERIAL
+  THREEFOLD_REPETITION
+  FIFTY_MOVE
+  ABANDONED
+}
+
+model Tournament {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  format      TournamentFormat @default(SWISS)
+  status      TournamentStatus @default(UPCOMING)
+  variant     TimeVariant      @default(BLITZ)
+  timeControl Int              @default(300)
+  increment   Int              @default(0)
+  rounds      Int              @default(7)
+  maxPlayers  Int              @default(64)
+  minRating   Int?
+  maxRating   Int?
+  startAt     DateTime
+  endAt       DateTime?
+  createdBy   String
+  createdAt   DateTime         @default(now())
+
+  players  TournamentPlayer[]
+  games    Game[]
+}
+
+enum TournamentFormat {
+  SWISS
+  ROUND_ROBIN
+  KNOCKOUT
+  ARENA
+}
+
+enum TournamentStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+model TournamentPlayer {
+  id           String     @id @default(cuid())
+  tournamentId String
+  userId       String
+  score        Float      @default(0)
+  tiebreak     Float      @default(0)
+  rank         Int?
+  joinedAt     DateTime   @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+}
+
+model Puzzle {
+  id              String   @id @default(cuid())
+  fen             String
+  moves           String[]
+  rating          Int      @default(1500)
+  ratingDeviation Float    @default(200)
+  popularity      Int      @default(0)
+  plays           Int      @default(0)
+  themes          String[]
+  openingEco      String?
+  createdAt       DateTime @default(now())
+
+  attempts PuzzleAttempt[]
+
+  @@index([rating])
+}
+
+model PuzzleAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  puzzleId  String
+  solved    Boolean
+  timeMs    Int
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  puzzle Puzzle @relation(fields: [puzzleId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+}
