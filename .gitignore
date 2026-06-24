@@ -13,3 +13,5 @@ dist/
 # OS / IDE files
 .DS_Store
 *.log
+docs/
+.claude/
