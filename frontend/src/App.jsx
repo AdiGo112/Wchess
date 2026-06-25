@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Game from "./pages/Game";
@@ -13,6 +14,7 @@ import Leaderboard from "./pages/Leaderboard";
 export default function App() {
   return (
     <div className="min-h-screen">
+      <Toaster position="top-right" />
       <Navbar />
       <main className="container mx-auto px-4 py-6">
         <Routes>

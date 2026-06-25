@@ -7,7 +7,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
-  const { player, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const toggleProfile = () => setProfileOpen(!profileOpen);
@@ -47,16 +47,16 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {player ? (
+          {user ? (
             <div className="relative">
               <button
                 onClick={toggleProfile}
                 className="flex items-center gap-2 bg-gray-800 px-3 py-2 rounded-lg hover:bg-gray-700 transition"
               >
                 <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm">
-                  {player.name ? player.name[0].toUpperCase() : "P"}
+                  {user.name ? user.name[0].toUpperCase() : "P"}
                 </div>
-                <span className="text-sm">{player.name || "Player"}</span>
+                <span className="text-sm">{user.name || "Player"}</span>
                 <ChevronDown size={16} className="text-gray-300" />
               </button>
 
@@ -122,7 +122,7 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {player ? (
+          {user ? (
             <>
               <button
                 onClick={() => {
