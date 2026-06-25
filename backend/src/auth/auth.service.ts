@@ -34,24 +34,34 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username,
-        email: dto.email.toLowerCase(),
-        name: dto.name,
-        passwordHash,
-        ratings: {
-          create: [
-            { variant: 'BULLET' },
-            { variant: 'BLITZ' },
-            { variant: 'RAPID' },
-            { variant: 'CLASSICAL' },
-          ],
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          username: dto.username,
+          email: dto.email.toLowerCase(),
+          name: dto.name,
+          passwordHash,
+          ratings: {
+            create: [
+              { variant: 'BULLET' },
+              { variant: 'BLITZ' },
+              { variant: 'RAPID' },
+              { variant: 'CLASSICAL' },
+            ],
+          },
         },
-      },
-    });
-
-    return { user: this.toProfile(user) };
+      });
+      return { user: this.toProfile(user) };
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        const target: string[] = e?.meta?.target ?? [];
+        const code = target.some((f) => f.includes('email'))
+          ? 'EMAIL_ALREADY_EXISTS'
+          : 'USERNAME_ALREADY_EXISTS';
+        throw new ConflictException({ message: 'Already exists', code });
+      }
+      throw e;
+    }
   }
 
   async validateUser(username: string, password: string) {
@@ -89,44 +99,60 @@ export class AuthService {
   async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string }> {
     const tokenHash = crypto.createHash('sha256').update(dto.refreshToken).digest('hex');
 
-    const storedToken = await this.prisma.refreshToken.findUnique({ where: { token: tokenHash } });
+    return this.prisma.$transaction(async (tx) => {
+      const storedToken = await tx.refreshToken.findUnique({ where: { token: tokenHash } });
 
-    if (!storedToken) {
-      throw new UnauthorizedException({ message: 'Refresh token not found', code: 'REFRESH_TOKEN_INVALID' });
-    }
+      if (!storedToken) {
+        throw new UnauthorizedException({ message: 'Refresh token not found', code: 'REFRESH_TOKEN_INVALID' });
+      }
 
-    if (storedToken.expiresAt < new Date()) {
-      await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
-      throw new UnauthorizedException({ message: 'Refresh token expired', code: 'REFRESH_TOKEN_INVALID' });
-    }
+      if (storedToken.expiresAt < new Date()) {
+        // Don't attempt delete inside the transaction — throwing here rolls back everything,
+        // so the delete would never commit. Expired tokens are harmless (always rejected by
+        // this check) and are cleaned up when the user logs out or via a scheduled job.
+        throw new UnauthorizedException({ message: 'Refresh token expired', code: 'REFRESH_TOKEN_INVALID' });
+      }
 
-    // Delete old token (rotation — single use)
-    await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+      // Check user BEFORE deleting — banned users should not be able to rotate their token
+      const user = await tx.user.findUnique({ where: { id: storedToken.userId } });
+      if (!user || user.isBanned) {
+        throw new UnauthorizedException({ message: 'User not found or banned', code: 'REFRESH_TOKEN_INVALID' });
+      }
 
-    const user = await this.prisma.user.findUnique({ where: { id: storedToken.userId } });
-    if (!user || user.isBanned) {
-      throw new UnauthorizedException({ message: 'User not found or banned', code: 'REFRESH_TOKEN_INVALID' });
-    }
+      // Atomic rotation: delete old, create new.
+      // Catch P2025 in case a concurrent request already consumed this token.
+      try {
+        await tx.refreshToken.delete({ where: { id: storedToken.id } });
+      } catch (e: any) {
+        if (e?.code === 'P2025') {
+          throw new UnauthorizedException({ message: 'Refresh token not found', code: 'REFRESH_TOKEN_INVALID' });
+        }
+        throw e;
+      }
 
-    const payload = { sub: user.id, username: user.username, role: user.role };
-    const accessToken = this.jwtService.sign(payload);
+      const payload = { sub: user.id, username: user.username, role: user.role };
+      const accessToken = this.jwtService.sign(payload);
 
-    const rawRefreshToken = crypto.randomBytes(64).toString('hex');
-    const newTokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+      const rawRefreshToken = crypto.randomBytes(64).toString('hex');
+      const newTokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
 
-    await this.prisma.refreshToken.create({
-      data: {
-        token: newTokenHash,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
+      await tx.refreshToken.create({
+        data: {
+          token: newTokenHash,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      return { accessToken, refreshToken: rawRefreshToken };
     });
-
-    return { accessToken, refreshToken: rawRefreshToken };
   }
 
-  async logout(userId: string): Promise<void> {
-    await this.prisma.refreshToken.deleteMany({ where: { userId } });
+  async logoutByRefreshToken(rawRefreshToken: string): Promise<void> {
+    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+    const stored = await this.prisma.refreshToken.findUnique({ where: { token: tokenHash } });
+    if (!stored) return; // already logged out — idempotent
+    await this.prisma.refreshToken.deleteMany({ where: { userId: stored.userId } });
   }
 
   async getMe(userId: string) {

@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const accessTokenRef = useRef(null);
+  const bootedRef = useRef(false);
 
   const storeTokens = (accessToken, refreshToken) => {
     accessTokenRef.current = accessToken;
@@ -37,8 +38,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const stored = sessionStorage.getItem(REFRESH_KEY);
     try {
-      await api.post("/auth/logout");
+      if (stored) await api.post("/auth/logout", { refreshToken: stored });
     } catch {
       // clear locally regardless
     }
@@ -47,6 +49,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (bootedRef.current) return;
+    bootedRef.current = true;
+
     setupInterceptors(
       getToken,
       refreshToken,
@@ -62,17 +67,19 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    refreshToken().then((token) => {
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-      api
-        .get("/auth/me")
-        .then((res) => setUser(res.data))
-        .catch(() => clearTokens())
-        .finally(() => setIsLoading(false));
-    });
+    refreshToken()
+      .then((token) => {
+        if (!token) {
+          setIsLoading(false);
+          return;
+        }
+        api
+          .get("/auth/me")
+          .then((res) => setUser(res.data))
+          .catch(() => setUser(null))
+          .finally(() => setIsLoading(false));
+      })
+      .catch(() => setIsLoading(false));
   }, []);
 
   const login = async (username, password) => {

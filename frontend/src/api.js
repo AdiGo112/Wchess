@@ -34,11 +34,12 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    const skipRetry = ["/auth/refresh", "/auth/login"];
+    const skipRetry = ["/auth/refresh", "/auth/login", "/auth/logout"];
+    const requestPath = original.url?.split("?")?.[0];
     if (
       error.response?.status !== 401 ||
       original._retry ||
-      skipRetry.some((u) => original.url?.includes(u))
+      skipRetry.includes(requestPath)
     ) {
       return Promise.reject(error);
     }

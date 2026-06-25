@@ -18,7 +18,7 @@ export default function Profile() {
         {/* Profile Header */}
         <div className="bg-gray-800 p-6 rounded-2xl flex items-center gap-6">
           <div className="w-20 h-20 rounded-full bg-indigo-500 flex items-center justify-center text-3xl font-bold">
-            {user.name?.[0].toUpperCase()}
+            {user.name?.[0]?.toUpperCase()}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-indigo-400">{user.name}</h1>

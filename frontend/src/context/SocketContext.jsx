@@ -10,11 +10,10 @@ export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token || !user) return;
+    if (!getToken() || !user) return;
 
     const socket = io("http://localhost:3000", {
-      auth: { token: `Bearer ${token}` },
+      auth: (cb) => cb({ token: `Bearer ${getToken()}` }),
       transports: ["websocket"],
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
