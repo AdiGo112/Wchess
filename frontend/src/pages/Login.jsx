@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import api from "../api";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
@@ -9,19 +8,26 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+
+  const from = location.state?.from?.pathname || "/";
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await api.post("/auth/login", { username, password });
-      await login(res.data);
-      navigate("/");
+      await login(username, password);
+      navigate(from, { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || "Login failed";
-      setError(Array.isArray(msg) ? msg.join(", ") : msg);
+      const code = err.response?.data?.code;
+      if (code === "INVALID_CREDENTIALS" || err.response?.status === 401) {
+        setError("Invalid username or password.");
+      } else {
+        const msg = err.response?.data?.message || "Login failed. Please try again.";
+        setError(Array.isArray(msg) ? msg.join(", ") : msg);
+      }
     } finally {
       setLoading(false);
     }

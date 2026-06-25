@@ -1,25 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
 import { CheckCircle, XCircle, Scale } from "lucide-react";
 import api from "../api";
 
 export default function GameHistory() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-
     api.get(`/games/history/${user.id}`)
       .then((res) => setGames(res.data.games || []))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user, navigate]);
-
-  if (!user) return null;
+  }, [user]);
 
   const getResultIcon = (game) => {
     const isWhite = game.whiteId === user.id;

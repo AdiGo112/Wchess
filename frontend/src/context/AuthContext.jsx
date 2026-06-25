@@ -1,45 +1,106 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import api from "../api";
+import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
+import api, { setupInterceptors } from "../api";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+const REFRESH_KEY = "chessweb_refresh_token";
+
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const accessTokenRef = useRef(null);
+  const bootedRef = useRef(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-    if (token) {
-      api.get("/auth/me")
-        .then((res) => setUser(res.data))
-        .catch(() => {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("user");
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
+  const storeTokens = (accessToken, refreshToken) => {
+    accessTokenRef.current = accessToken;
+    sessionStorage.setItem(REFRESH_KEY, refreshToken);
+  };
+
+  const clearTokens = () => {
+    accessTokenRef.current = null;
+    sessionStorage.removeItem(REFRESH_KEY);
+  };
+
+  const getToken = useCallback(() => accessTokenRef.current, []);
+
+  const refreshToken = useCallback(async () => {
+    const stored = sessionStorage.getItem(REFRESH_KEY);
+    if (!stored) return null;
+    try {
+      const res = await api.post("/auth/refresh", { refreshToken: stored });
+      storeTokens(res.data.accessToken, res.data.refreshToken);
+      return res.data.accessToken;
+    } catch {
+      clearTokens();
+      setUser(null);
+      return null;
     }
   }, []);
 
-  const login = async ({ accessToken, user: userData }) => {
-    localStorage.setItem("accessToken", accessToken);
-    localStorage.setItem("user", JSON.stringify(userData));
-    setUser(userData);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+  const logout = useCallback(async () => {
+    const stored = sessionStorage.getItem(REFRESH_KEY);
+    try {
+      if (stored) await api.post("/auth/logout", { refreshToken: stored });
+    } catch {
+      // clear locally regardless
+    }
+    clearTokens();
     setUser(null);
+  }, []);
+
+  useEffect(() => {
+    if (bootedRef.current) return;
+    bootedRef.current = true;
+
+    setupInterceptors(
+      getToken,
+      refreshToken,
+      () => {
+        clearTokens();
+        setUser(null);
+      }
+    );
+
+    const stored = sessionStorage.getItem(REFRESH_KEY);
+    if (!stored) {
+      setIsLoading(false);
+      return;
+    }
+
+    refreshToken()
+      .then((token) => {
+        if (!token) {
+          setIsLoading(false);
+          return;
+        }
+        api
+          .get("/auth/me")
+          .then((res) => setUser(res.data))
+          .catch(() => setUser(null))
+          .finally(() => setIsLoading(false));
+      })
+      .catch(() => setIsLoading(false));
+  }, []);
+
+  const login = async (username, password) => {
+    const res = await api.post("/auth/login", { username, password });
+    storeTokens(res.data.accessToken, res.data.refreshToken);
+    setUser(res.data.user);
+    return res.data;
   };
 
-  // Keep player as alias for backward compat
+  const register = async (data) => {
+    const res = await api.post("/auth/register", data);
+    return res.data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, player: user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, getToken, refreshToken }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}
