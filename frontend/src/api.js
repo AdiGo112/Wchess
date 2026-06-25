@@ -34,7 +34,12 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    if (error.response?.status !== 401 || original._retry) {
+    const skipRetry = ["/auth/refresh", "/auth/login"];
+    if (
+      error.response?.status !== 401 ||
+      original._retry ||
+      skipRetry.some((u) => original.url?.includes(u))
+    ) {
       return Promise.reject(error);
     }
 
