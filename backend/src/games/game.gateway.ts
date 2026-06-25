@@ -213,6 +213,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         fen: room.fen,
         timers: room.timers,
         check: chess.inCheck(),
+        drawOfferedBy: null, // move always cancels any pending draw offer
       });
 
       // Check terminal states
@@ -292,6 +293,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     room.drawOfferedBy = null;
     await this.gamesService.setRoom(room);
     this.server.to(data.roomId).emit('draw_declined', { roomId: room.id });
+  }
+
+  @SubscribeMessage('rematch_request')
+  async handleRematchRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    const room = await this.gamesService.getRoom(data.roomId);
+    if (!room || room.status !== 'ended' || !room.blackPlayer || room.blackPlayer.id === 'computer') return;
+
+    const userId = client.data.userId;
+
+    if (!room.rematchRequestedBy) {
+      room.rematchRequestedBy = userId;
+      await this.gamesService.setRoom(room);
+      this.server.to(data.roomId).emit('rematch_offered', { byUserId: userId });
+    } else if (room.rematchRequestedBy !== userId) {
+      // Both players want rematch — swap colors and create new room
+      const newRoom = await this.gamesService.createRoom(
+        room.blackPlayer,
+        room.whitePlayer,
+        room.timeControl,
+        room.increment,
+      );
+      this.server.to(data.roomId).emit('rematch_ready', { roomId: newRoom.id });
+    }
   }
 
   @SubscribeMessage('claim_timeout')
