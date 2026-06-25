@@ -2,20 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ChessGame from "../components/ChessGame";
 import { useSocket } from "../context/SocketContext";
-import { useAuth } from "../context/AuthContext";
 
 export default function Game() {
   const navigate = useNavigate();
   const location = useLocation();
   const { roomId: routeRoomId } = useParams();
   const { socket } = useSocket();
-  const { user } = useAuth();
 
   const [roomId, setRoomId] = useState(routeRoomId || location.state?.roomId);
   const { mode, timeControl } = location.state || {};
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
     if (!socket) return;
 
     if (!roomId && mode === "online" && timeControl) {
@@ -38,9 +35,7 @@ export default function Game() {
       });
       return () => socket.off("room_created");
     }
-  }, [socket, user, mode, timeControl, roomId, navigate]);
-
-  if (!user) return null;
+  }, [socket, mode, timeControl, roomId]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">

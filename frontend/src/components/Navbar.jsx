@@ -73,9 +73,10 @@ export default function Navbar() {
                     View Profile
                   </button>
                   <button
-                    onClick={() => {
-                      logout();
+                    onClick={async () => {
+                      await logout();
                       setProfileOpen(false);
+                      navigate("/login");
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 transition"
                   >
@@ -134,9 +135,10 @@ export default function Navbar() {
                 <User size={16} /> Profile
               </button>
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   setMenuOpen(false);
+                  navigate("/login");
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition"
               >

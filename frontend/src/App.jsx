@@ -2,6 +2,7 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Home from "./pages/Home";
 import Game from "./pages/Game";
 import Login from "./pages/Login";
@@ -18,15 +19,20 @@ export default function App() {
       <Navbar />
       <main className="container mx-auto px-4 py-6">
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<Home />} />
-          <Route path="/game" element={<Game />} />
-          <Route path="/game/:roomId" element={<Game />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/history" element={<GameHistory />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/players" element={<PlayerList />} />
+
+          {/* Protected routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/game" element={<Game />} />
+            <Route path="/game/:roomId" element={<Game />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/history" element={<GameHistory />} />
+          </Route>
         </Routes>
       </main>
     </div>

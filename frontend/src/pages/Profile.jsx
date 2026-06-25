@@ -6,10 +6,10 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  if (!user) {
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
-    return null;
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white py-10 px-4">
@@ -26,7 +26,7 @@ export default function Profile() {
             <p className="text-gray-500 text-sm">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
           </div>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="ml-auto bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold"
           >
             Logout
