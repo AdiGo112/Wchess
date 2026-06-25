@@ -54,7 +54,23 @@ export default function ChessGame({ roomId, mode, timeControl }) {
     socket.on("draw_declined", () => setDrawOffered(false));
 
     socket.on("opponent_disconnected", (data) => {
-      setStatus(`Opponent disconnected. ${data.grace / 1000}s grace period.`);
+      setStatus(`Opponent disconnected. ${data.grace / 1000}s to auto-resign.`);
+    });
+
+    socket.on("opponent_reconnected", () => {
+      setStatus("Game in progress");
+    });
+
+    socket.on("game_state", (data) => {
+      const chess = new Chess(data.fen);
+      setGame(chess);
+      setFen(data.fen);
+      setTimers(data.timers);
+      setMoveHistory(data.moves || []);
+      setPlayers({ white: data.white, black: data.black });
+      if (data.drawOfferedBy) setDrawOffered(true);
+      setStatus("Game in progress");
+      startClock();
     });
 
     socket.on("invalid_move", (data) => {
@@ -63,7 +79,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
 
     return () => {
       ["game_start", "move_made", "game_over", "draw_offered", "draw_declined",
-       "opponent_disconnected", "invalid_move"].forEach((e) => socket.off(e));
+       "opponent_disconnected", "opponent_reconnected", "game_state", "invalid_move"].forEach((e) => socket.off(e));
       stopClock();
     };
   }, [socket, roomId, user]);
