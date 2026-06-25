@@ -2,13 +2,12 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
-  BadRequestException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -18,29 +17,32 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findFirst({
-      where: { OR: [{ username: dto.username }, { email: dto.email }] },
+    const existingEmail = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
     });
-
-    if (existing?.username === dto.username) {
-      throw new ConflictException({ code: 'AUTH_001', message: 'Username already taken' });
-    }
-    if (existing?.email === dto.email) {
-      throw new ConflictException({ code: 'AUTH_002', message: 'Email already registered' });
+    if (existingEmail) {
+      throw new ConflictException({ message: 'Email already registered', code: 'EMAIL_ALREADY_EXISTS' });
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const existingUsername = await this.prisma.user.findUnique({
+      where: { username: dto.username },
+    });
+    if (existingUsername) {
+      throw new ConflictException({ message: 'Username already taken', code: 'USERNAME_ALREADY_EXISTS' });
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const user = await this.prisma.user.create({
       data: {
         username: dto.username,
-        email: dto.email,
+        email: dto.email.toLowerCase(),
         name: dto.name,
         passwordHash,
         ratings: {
           create: [
-            { variant: 'BLITZ' },
             { variant: 'BULLET' },
+            { variant: 'BLITZ' },
             { variant: 'RAPID' },
             { variant: 'CLASSICAL' },
           ],
@@ -48,57 +50,56 @@ export class AuthService {
       },
     });
 
-    const token = this.signToken(user.id, user.username, user.role);
-    return { accessToken: token, user: this.sanitize(user) };
+    return { user: this.toProfile(user) };
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { username: dto.username },
+  async validateUser(username: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { username } });
+    if (!user || !user.passwordHash) return null;
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) return null;
+    if (user.isBanned) return null;
+    return user;
+  }
+
+  async login(user: any) {
+    const payload = { sub: user.id, username: user.username, role: user.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    const rawRefreshToken = crypto.randomBytes(64).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token: tokenHash,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
     });
-
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException({ code: 'AUTH_003', message: 'Invalid credentials' });
-    }
-
-    const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) {
-      throw new UnauthorizedException({ code: 'AUTH_003', message: 'Invalid credentials' });
-    }
-
-    if (user.isBanned) {
-      throw new UnauthorizedException({ code: 'AUTH_006', message: 'Account suspended' });
-    }
 
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
 
-    const token = this.signToken(user.id, user.username, user.role);
-    return { accessToken: token, user: this.sanitize(user) };
+    return { accessToken, refreshToken: rawRefreshToken, user: this.toProfile(user) };
   }
 
   async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        ratings: true,
-      },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    return this.sanitize(user);
+    return this.toProfile(user);
   }
 
-  private signToken(userId: string, username: string, role: string) {
-    return this.jwtService.sign(
-      { sub: userId, username, role },
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' },
-    );
-  }
-
-  private sanitize(user: any) {
-    const { passwordHash, ...safe } = user;
-    return safe;
+  private toProfile(user: any) {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+      createdAt: user.createdAt,
+    };
   }
 }
