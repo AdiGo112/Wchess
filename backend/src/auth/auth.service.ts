@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
+import { RefreshDto } from './dto/refresh.dto';
 
 @Injectable()
 export class AuthService {
@@ -83,6 +84,49 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken: rawRefreshToken, user: this.toProfile(user) };
+  }
+
+  async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string }> {
+    const tokenHash = crypto.createHash('sha256').update(dto.refreshToken).digest('hex');
+
+    const storedToken = await this.prisma.refreshToken.findUnique({ where: { token: tokenHash } });
+
+    if (!storedToken) {
+      throw new UnauthorizedException({ message: 'Refresh token not found', code: 'REFRESH_TOKEN_INVALID' });
+    }
+
+    if (storedToken.expiresAt < new Date()) {
+      await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+      throw new UnauthorizedException({ message: 'Refresh token expired', code: 'REFRESH_TOKEN_INVALID' });
+    }
+
+    // Delete old token (rotation — single use)
+    await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+
+    const user = await this.prisma.user.findUnique({ where: { id: storedToken.userId } });
+    if (!user || user.isBanned) {
+      throw new UnauthorizedException({ message: 'User not found or banned', code: 'REFRESH_TOKEN_INVALID' });
+    }
+
+    const payload = { sub: user.id, username: user.username, role: user.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    const rawRefreshToken = crypto.randomBytes(64).toString('hex');
+    const newTokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token: newTokenHash,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return { accessToken, refreshToken: rawRefreshToken };
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
   async getMe(userId: string) {

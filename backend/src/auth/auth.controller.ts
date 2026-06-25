@@ -12,6 +12,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
 import { LocalAuthGuard } from './local-auth.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -34,6 +35,22 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   login(@Request() req: any) {
     return this.authService.login(req.user);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate refresh token and issue new access token' })
+  refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke all refresh tokens for current user' })
+  async logout(@Request() req: any) {
+    await this.authService.logout(req.user.id);
   }
 
   @Get('me')
