@@ -93,8 +93,9 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
 
   async enqueue(entry: QueueEntry): Promise<void> {
     const key = this.queueKey(entry.variant, entry.timeControl);
-    // Prevent duplicates: drop any prior entry for this user in this queue.
-    await this.removeUser(key, entry.userId);
+    // DOMAIN rule 1: a player is only ever in one queue — joining any queue
+    // leaves every other (and dedupes this one).
+    await this.leaveAllQueues(entry.userId);
     await this.redis.lpush(key, JSON.stringify(entry));
     this.activeKeys.add(key);
     this.logger.log(`${entry.username} (${entry.rating}) joined ${key}`);
@@ -106,6 +107,13 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     timeControl: number,
   ): Promise<void> {
     await this.removeUser(this.queueKey(variant, timeControl), userId);
+  }
+
+  /** Remove the user from every active queue (single-queue invariant + cleanup). */
+  async leaveAllQueues(userId: string): Promise<void> {
+    for (const key of [...this.activeKeys]) {
+      await this.removeUser(key, userId);
+    }
   }
 
   /** Remove every queued entry for a user from a specific queue key. */
@@ -332,6 +340,19 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    // Atomically claim the pending challenge so two simultaneous accepts
+    // can't both create a game (TOCTOU guard). Only the winner proceeds.
+    const claimed = await this.prisma.challenge.updateMany({
+      where: { token, status: 'pending' },
+      data: { status: 'accepted' },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictException({
+        code: 'CHALLENGE_ALREADY_ACCEPTED',
+        message: 'Challenge already accepted',
+      });
+    }
+
     // Resolve colors per creatorColor preference.
     let whiteId: string;
     let blackId: string;
@@ -353,16 +374,26 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       this.buildPlayer(blackId, challenge.timeControl),
     ]);
 
-    const room = await this.gamesService.createRoom(
-      whitePlayer,
-      blackPlayer,
-      challenge.timeControl,
-      challenge.increment,
-    );
+    let room: { id: string };
+    try {
+      room = await this.gamesService.createRoom(
+        whitePlayer,
+        blackPlayer,
+        challenge.timeControl,
+        challenge.increment,
+      );
+    } catch (err) {
+      // Room creation failed after we claimed it — release the claim so the
+      // link works again rather than being permanently stuck on 'accepted'.
+      await this.prisma.challenge
+        .update({ where: { token }, data: { status: 'pending' } })
+        .catch(() => undefined);
+      throw err;
+    }
 
     await this.prisma.challenge.update({
       where: { token },
-      data: { status: 'accepted', gameId: room.id },
+      data: { gameId: room.id },
     });
 
     const creatorColor =

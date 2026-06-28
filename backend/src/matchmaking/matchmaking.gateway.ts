@@ -41,10 +41,10 @@ export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {
 
   async handleDisconnect(client: Socket) {
     const userId = client.data.userId;
-    const variant = client.data.queueVariant;
-    const timeControl = client.data.queueTimeControl;
-    if (userId && variant && timeControl) {
-      await this.matchmaking.dequeue(userId, variant, timeControl);
+    // Single-queue invariant means at most one entry, but sweep all queues so
+    // a leaked entry can never outlive the socket.
+    if (userId) {
+      await this.matchmaking.leaveAllQueues(userId);
     }
   }
 
@@ -73,10 +73,6 @@ export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {
       increment: data.increment ?? 0,
     });
 
-    // Remember where this socket queued so we can clean up on disconnect.
-    client.data.queueVariant = variant;
-    client.data.queueTimeControl = data.timeControl;
-
     client.emit('queued', { variant, timeControl: data.timeControl });
   }
 
@@ -91,8 +87,6 @@ export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {
     const variant = this.matchmaking.variantOf(data.timeControl);
     await this.matchmaking.dequeue(userId, variant, data.timeControl);
 
-    client.data.queueVariant = null;
-    client.data.queueTimeControl = null;
     client.emit('left_queue', { variant, timeControl: data.timeControl });
   }
 

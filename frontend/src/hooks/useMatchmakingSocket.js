@@ -16,7 +16,9 @@ export default function useMatchmakingSocket() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchSeconds, setSearchSeconds] = useState(0);
   const [position, setPosition] = useState(null);
-  const queuedTcRef = useRef(null); // timeControl we're queued under (for leave)
+  // The queue we intend to be in: { timeControl, increment } | null. Doubles as
+  // "are we searching" for re-join, and carries the params to re-emit.
+  const desiredQueueRef = useRef(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -24,23 +26,30 @@ export default function useMatchmakingSocket() {
     const goToGame = (data) => {
       const roomId = data?.roomId || data?.gameId;
       if (!roomId) return;
-      queuedTcRef.current = null;
+      desiredQueueRef.current = null;
       setIsSearching(false);
       navigate(`/game/${roomId}`);
     };
     const onQueued = () => setIsSearching(true);
     const onPosition = (data) => setPosition(data?.position ?? null);
+    // On a transient reconnect the server dropped our queue entry; re-join so
+    // the user isn't stranded on "Searching…" forever.
+    const onReconnect = () => {
+      if (desiredQueueRef.current) socket.emit("join_queue", desiredQueueRef.current);
+    };
 
     socket.on("match_found", goToGame);
     socket.on("challenge_accepted", goToGame);
     socket.on("queued", onQueued);
     socket.on("queue_position", onPosition);
+    socket.on("connect", onReconnect);
 
     return () => {
       socket.off("match_found", goToGame);
       socket.off("challenge_accepted", goToGame);
       socket.off("queued", onQueued);
       socket.off("queue_position", onPosition);
+      socket.off("connect", onReconnect);
     };
   }, [socket, navigate]);
 
@@ -58,7 +67,7 @@ export default function useMatchmakingSocket() {
   const joinQueue = useCallback(
     ({ timeControl, increment = 0 }) => {
       if (!socket) return;
-      queuedTcRef.current = timeControl;
+      desiredQueueRef.current = { timeControl, increment };
       setIsSearching(true);
       socket.emit("join_queue", { timeControl, increment });
     },
@@ -66,10 +75,10 @@ export default function useMatchmakingSocket() {
   );
 
   const leaveQueue = useCallback(() => {
-    if (socket && queuedTcRef.current != null) {
-      socket.emit("leave_queue", { timeControl: queuedTcRef.current });
+    if (socket && desiredQueueRef.current) {
+      socket.emit("leave_queue", { timeControl: desiredQueueRef.current.timeControl });
     }
-    queuedTcRef.current = null;
+    desiredQueueRef.current = null;
     setIsSearching(false);
   }, [socket]);
 
