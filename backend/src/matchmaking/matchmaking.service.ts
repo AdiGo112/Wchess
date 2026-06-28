@@ -116,6 +116,20 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Is this user already sitting in the given queue? */
+  async isQueued(
+    userId: string,
+    variant: string,
+    timeControl: number,
+  ): Promise<boolean> {
+    const raw = await this.redis.lrange(
+      this.queueKey(variant, timeControl),
+      0,
+      -1,
+    );
+    return raw.some((r) => this.parse(r)?.userId === userId);
+  }
+
   /** Remove every queued entry for a user from a specific queue key. */
   private async removeUser(key: string, userId: string): Promise<void> {
     const raw = await this.redis.lrange(key, 0, -1);
@@ -216,12 +230,22 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     const white = aIsWhite ? a.entry : b.entry;
     const black = aIsWhite ? b.entry : a.entry;
 
-    const room = await this.gamesService.createRoom(
-      { id: white.userId, username: white.username, rating: white.rating },
-      { id: black.userId, username: black.username, rating: black.rating },
-      white.timeControl,
-      white.increment,
-    );
+    let room: { id: string };
+    try {
+      room = await this.gamesService.createRoom(
+        { id: white.userId, username: white.username, rating: white.rating },
+        { id: black.userId, username: black.username, rating: black.rating },
+        white.timeControl,
+        white.increment,
+      );
+    } catch (err) {
+      // Room creation failed after both were pulled — put both back so the
+      // next poll retries instead of silently dropping them from the queue.
+      await this.redis.lpush(key, a.raw);
+      await this.redis.lpush(key, b.raw);
+      this.logger.error('createRoom failed during pairing; re-queued both', err);
+      return;
+    }
 
     this.logger.log(
       `Match: ${white.username} (W) vs ${black.username} (B) → room ${room.id}`,
@@ -241,6 +265,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     this.server.to(socketId).emit('match_found', {
       roomId,
       color,
+      timeControl: opponent.timeControl,
       opponent: {
         id: opponent.userId,
         username: opponent.username,
@@ -287,11 +312,24 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     const token = randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
 
+    // Bound table growth: drop this creator's already-used/expired challenges.
+    await this.prisma.challenge.deleteMany({
+      where: {
+        creatorId,
+        OR: [
+          { status: { in: ['accepted', 'expired'] } },
+          { expiresAt: { lt: new Date() } },
+        ],
+      },
+    });
+
     await this.prisma.challenge.create({
       data: {
         token,
         creatorId,
-        variant: dto.variant,
+        // Derive variant from timeControl so it can't contradict the rated
+        // variant (variantFromTimeControl) the game is actually scored under.
+        variant: this.variantOf(dto.timeControl),
         timeControl: dto.timeControl,
         increment: dto.increment ?? 0,
         creatorColor: dto.creatorColor ?? 'random',
@@ -404,6 +442,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     await this.notifyUser(challenge.creatorId, 'challenge_accepted', {
       roomId: room.id,
       color: creatorColor,
+      timeControl: challenge.timeControl,
     });
 
     this.logger.log(
@@ -411,7 +450,11 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
         `(creator=${creatorColor}, accepter=${accepterColor})`,
     );
 
-    return { gameId: room.id, color: accepterColor };
+    return {
+      gameId: room.id,
+      color: accepterColor,
+      timeControl: challenge.timeControl,
+    };
   }
 
   async createComputerGame(userId: string, dto: CreateComputerGameDto) {

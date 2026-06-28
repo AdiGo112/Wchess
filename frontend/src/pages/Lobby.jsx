@@ -75,7 +75,7 @@ export default function Lobby() {
         timeControl: computerPreset.timeControl,
         increment: computerPreset.increment,
       });
-      navigate(`/game/${data.gameId}`);
+      navigate(`/game/${data.gameId}`, { state: { timeControl: computerPreset.timeControl } });
     } catch {
       toast.error("Could not start computer game");
       setStarting(false);

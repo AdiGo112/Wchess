@@ -28,7 +28,8 @@ export default function useMatchmakingSocket() {
       if (!roomId) return;
       desiredQueueRef.current = null;
       setIsSearching(false);
-      navigate(`/game/${roomId}`);
+      // Pass timeControl so the board shows correct clocks before game_start.
+      navigate(`/game/${roomId}`, { state: { timeControl: data?.timeControl } });
     };
     const onQueued = () => setIsSearching(true);
     const onPosition = (data) => setPosition(data?.position ?? null);

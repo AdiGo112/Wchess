@@ -60,6 +60,16 @@ export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     const variant = this.matchmaking.variantOf(data.timeControl);
+
+    // DOMAIN error ALREADY_IN_QUEUE: a no-op re-join of the same queue would
+    // otherwise reset the player's accrued wait time / tolerance.
+    if (await this.matchmaking.isQueued(userId, variant, data.timeControl)) {
+      return client.emit('error', {
+        code: 'ALREADY_IN_QUEUE',
+        message: 'Already in this queue',
+      });
+    }
+
     const rating = await this.getUserRating(userId, variant);
 
     await this.matchmaking.enqueue({

@@ -53,6 +53,7 @@ export class GamesService {
     blackPlayer: { id: string; username: string; rating: number },
     timeControl: number,
     increment = 0,
+    difficulty?: number,
   ): Promise<ActiveRoom> {
     const { customAlphabet } = await import('nanoid');
     const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 6);
@@ -75,6 +76,7 @@ export class GamesService {
       rematchRequestedBy: null,
       spectatorCount: 0,
       variant,
+      difficulty,
     };
 
     await this.setRoom(room);
@@ -92,15 +94,13 @@ export class GamesService {
     timeControl: number,
     increment = 0,
   ): Promise<ActiveRoom> {
-    const room = await this.createRoom(
+    return this.createRoom(
       player,
       { id: 'computer', username: 'Stockfish', rating: 1500 },
       timeControl,
       increment,
+      difficulty,
     );
-    room.difficulty = difficulty;
-    await this.setRoom(room);
-    return room;
   }
 
   async saveCompletedGame(params: {

@@ -26,7 +26,12 @@ export default function ChallengeAccept() {
 
     api
       .post(`/matchmaking/challenge/${token}/accept`)
-      .then(({ data }) => navigate(`/game/${data.gameId}`, { replace: true }))
+      .then(({ data }) =>
+        navigate(`/game/${data.gameId}`, {
+          replace: true,
+          state: { timeControl: data.timeControl },
+        }),
+      )
       .catch((err) => {
         const code = err.response?.data?.code;
         const msg = ERROR_COPY[code] || "Could not accept this challenge.";
