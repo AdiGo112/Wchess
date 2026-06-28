@@ -22,7 +22,7 @@ const Card = ({ title, children }) => (
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const { joinQueue, leaveQueue, isSearching, searchSeconds } = useMatchmakingSocket();
+  const { joinQueue, leaveQueue, isSearching, searchSeconds, position } = useMatchmakingSocket();
 
   // Quick match
   const [quickPreset, setQuickPreset] = useState(TIME_PRESETS[3]); // 5|0 Blitz
@@ -94,6 +94,9 @@ export default function Lobby() {
               <Loader2 className="animate-spin mx-auto mb-3 text-indigo-400" size={32} />
               <p className="text-gray-300">Searching for opponent…</p>
               <p className="text-2xl font-mono mt-1">{fmt(searchSeconds)}</p>
+              {position != null && (
+                <p className="text-sm text-gray-400 mt-1">Position: {position} in queue</p>
+              )}
               <button
                 onClick={leaveQueue}
                 className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold"

@@ -30,11 +30,14 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MatchmakingService.name);
   private server: Server | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
+  private positionTimer: NodeJS.Timeout | null = null;
 
   /** Queue keys that have had at least one entry since startup. */
   private readonly activeKeys = new Set<string>();
 
   private static readonly POLL_INTERVAL_MS = 500;
+  private static readonly POSITION_INTERVAL_MS = 5000;
+  private static readonly EST_WAIT_PER_POSITION_SEC = 15;
   // ADR-0008: tolerance = min(50 + waitSeconds * 12, 400)
   private static readonly BASE_TOLERANCE = 50;
   private static readonly TOLERANCE_PER_SEC = 12;
@@ -52,10 +55,17 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Matchmaking poll cycle failed', err),
       );
     }, MatchmakingService.POLL_INTERVAL_MS);
+
+    this.positionTimer = setInterval(() => {
+      this.broadcastPositions().catch((err) =>
+        this.logger.error('Queue position broadcast failed', err),
+      );
+    }, MatchmakingService.POSITION_INTERVAL_MS);
   }
 
   onModuleDestroy() {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.positionTimer) clearInterval(this.positionTimer);
   }
 
   /** Wired by the gateway in afterInit so the service can emit match_found. */
@@ -152,6 +162,30 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Every 5s, tell each queued player their position (1 = next in line) and a
+   * rough wait estimate. API_DESIGN `queue_position` event. (ADR-0008 governs
+   * the actual pairing; this is purely a UX hint.)
+   */
+  private async broadcastPositions(): Promise<void> {
+    if (!this.server) return;
+    for (const key of [...this.activeKeys]) {
+      const raw = await this.redis.lrange(key, 0, -1);
+      if (raw.length === 0) continue;
+      const entries = raw
+        .map((r) => this.parse(r))
+        .filter((e): e is QueueEntry => e !== null)
+        .sort((a, b) => a.enqueuedAt - b.enqueuedAt);
+      entries.forEach((entry, idx) => {
+        const position = idx + 1;
+        this.server!.to(entry.socketId).emit('queue_position', {
+          position,
+          estimatedWait: position * MatchmakingService.EST_WAIT_PER_POSITION_SEC,
+        });
+      });
     }
   }
 

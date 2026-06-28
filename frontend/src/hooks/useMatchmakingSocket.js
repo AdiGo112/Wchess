@@ -15,6 +15,7 @@ export default function useMatchmakingSocket() {
   const navigate = useNavigate();
   const [isSearching, setIsSearching] = useState(false);
   const [searchSeconds, setSearchSeconds] = useState(0);
+  const [position, setPosition] = useState(null);
   const queuedTcRef = useRef(null); // timeControl we're queued under (for leave)
 
   useEffect(() => {
@@ -28,22 +29,26 @@ export default function useMatchmakingSocket() {
       navigate(`/game/${roomId}`);
     };
     const onQueued = () => setIsSearching(true);
+    const onPosition = (data) => setPosition(data?.position ?? null);
 
     socket.on("match_found", goToGame);
     socket.on("challenge_accepted", goToGame);
     socket.on("queued", onQueued);
+    socket.on("queue_position", onPosition);
 
     return () => {
       socket.off("match_found", goToGame);
       socket.off("challenge_accepted", goToGame);
       socket.off("queued", onQueued);
+      socket.off("queue_position", onPosition);
     };
   }, [socket, navigate]);
 
-  // Local elapsed-time ticker while searching (server doesn't push position).
+  // Local elapsed-time ticker while searching; clears position when stopped.
   useEffect(() => {
     if (!isSearching) {
       setSearchSeconds(0);
+      setPosition(null);
       return;
     }
     const id = setInterval(() => setSearchSeconds((s) => s + 1), 1000);
@@ -71,5 +76,5 @@ export default function useMatchmakingSocket() {
   // Leave the queue if the component using this hook unmounts mid-search.
   useEffect(() => leaveQueue, [leaveQueue]);
 
-  return { joinQueue, leaveQueue, isSearching, searchSeconds };
+  return { joinQueue, leaveQueue, isSearching, searchSeconds, position };
 }
