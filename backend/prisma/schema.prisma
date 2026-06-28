@@ -32,6 +32,7 @@ model User {
   puzzleAttempts PuzzleAttempt[]
   tournaments    TournamentPlayer[]
   refreshTokens  RefreshToken[]
+  challenges     Challenge[]
 
   @@index([username])
   @@index([email])
@@ -53,6 +54,23 @@ model RefreshToken {
 
   @@index([token])
   @@index([userId])
+}
+
+model Challenge {
+  id           String   @id @default(uuid())
+  token        String   @unique // 16-byte random hex used in the share URL
+  creatorId    String
+  creator      User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  variant      String
+  timeControl  Int
+  increment    Int      @default(0)
+  creatorColor String   @default("random") // 'white' | 'black' | 'random'
+  status       String   @default("pending") // 'pending' | 'accepted' | 'expired'
+  gameId       String? // set when accepted
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([creatorId])
 }
 
 model UserRating {

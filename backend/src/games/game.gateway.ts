@@ -22,6 +22,7 @@ import { StockfishService } from '../stockfish/stockfish.service';
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(GameGateway.name);
+  private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private gamesService: GamesService,
@@ -39,14 +40,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (!token) { client.disconnect(); return; }
 
       const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'fallback-secret',
+        secret: process.env.JWT_SECRET,
       });
 
       client.data.userId = payload.sub;
       client.data.username = payload.username;
 
       await this.redis.set(`socket:${client.id}`, payload.sub, 3600);
-      await this.redis.set(`user:socket:${payload.sub}`, client.id, 3600);
+      // No TTL: this mapping must outlive any session length (it's used to
+      // deliver e.g. challenge_accepted) and is explicitly deleted on disconnect.
+      await this.redis.set(`user:socket:${payload.sub}`, client.id);
       await this.redis.set(`online:${payload.sub}`, '1', 30);
 
       this.logger.log(`Client connected: ${payload.username} (${client.id})`);
@@ -59,14 +62,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.data.userId;
     if (!userId) return;
 
-    await this.redis.del(`socket:${client.id}`);
-    await this.redis.del(`online:${userId}`);
+    await Promise.all([
+      this.redis.del(`socket:${client.id}`),
+      this.redis.del(`online:${userId}`),
+      this.redis.del(`user:socket:${userId}`),
+    ]);
 
     const roomId = client.data.roomId;
     if (roomId) {
       const room = await this.gamesService.getRoom(roomId);
       if (room && room.status === 'active') {
+        const color = room.whitePlayer.id === userId ? 'white' : 'black';
         this.server.to(roomId).emit('opponent_disconnected', { roomId, grace: 60000 });
+
+        const timerKey = `${roomId}:${color}`;
+        const existing = this.disconnectTimers.get(timerKey);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(async () => {
+          this.disconnectTimers.delete(timerKey);
+          const current = await this.gamesService.getRoom(roomId);
+          if (!current || current.status !== 'active') return;
+          const winner = color === 'white' ? 'BLACK' : 'WHITE';
+          await this.endGame(current, winner as 'WHITE' | 'BLACK', 'ABANDONED');
+        }, 60_000);
+
+        this.disconnectTimers.set(timerKey, timer);
       }
     }
 
@@ -81,9 +102,37 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room) return client.emit('error', { message: 'Room not found' });
 
+    const userId = client.data.userId;
     client.join(data.roomId);
     client.data.roomId = data.roomId;
 
+    // Reconnect: player is returning to an active game
+    const isWhite = room.whitePlayer.id === userId;
+    const isBlack = room.blackPlayer?.id === userId;
+    if ((isWhite || isBlack) && room.status === 'active') {
+      const color = isWhite ? 'white' : 'black';
+      const timerKey = `${data.roomId}:${color}`;
+      const timer = this.disconnectTimers.get(timerKey);
+      if (timer) {
+        clearTimeout(timer);
+        this.disconnectTimers.delete(timerKey);
+        this.server.to(data.roomId).emit('opponent_reconnected', { roomId: room.id, color });
+      }
+
+      // Send current game state to the reconnecting client only
+      client.emit('game_state', {
+        roomId: room.id,
+        white: room.whitePlayer,
+        black: room.blackPlayer,
+        fen: room.fen,
+        timers: room.timers,
+        moves: room.moves,
+        drawOfferedBy: room.drawOfferedBy,
+      });
+      return;
+    }
+
+    // First join
     if (room.status === 'waiting') {
       room.status = 'active';
       room.startedAt = Date.now();
@@ -166,6 +215,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         fen: room.fen,
         timers: room.timers,
         check: chess.inCheck(),
+        drawOfferedBy: null, // move always cancels any pending draw offer
       });
 
       // Check terminal states
@@ -227,6 +277,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active' || !room.drawOfferedBy) return;
 
+    const userId = client.data.userId;
+    const acceptorColor = room.whitePlayer.id === userId ? 'white' : 'black';
+    if (acceptorColor === room.drawOfferedBy) return; // can't accept your own offer
+
     await this.endGame(room, 'DRAW', 'AGREEMENT');
   }
 
@@ -241,6 +295,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     room.drawOfferedBy = null;
     await this.gamesService.setRoom(room);
     this.server.to(data.roomId).emit('draw_declined', { roomId: room.id });
+  }
+
+  @SubscribeMessage('rematch_request')
+  async handleRematchRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    const room = await this.gamesService.getRoom(data.roomId);
+    if (!room || room.status !== 'ended' || !room.blackPlayer || room.blackPlayer.id === 'computer') return;
+
+    const userId = client.data.userId;
+
+    if (!room.rematchRequestedBy) {
+      room.rematchRequestedBy = userId;
+      await this.gamesService.setRoom(room);
+      this.server.to(data.roomId).emit('rematch_offered', { byUserId: userId });
+    } else if (room.rematchRequestedBy !== userId) {
+      // Both players want rematch — swap colors and create new room
+      const newRoom = await this.gamesService.createRoom(
+        room.blackPlayer,
+        room.whitePlayer,
+        room.timeControl,
+        room.increment,
+      );
+      this.server.to(data.roomId).emit('rematch_ready', { roomId: newRoom.id });
+    }
   }
 
   @SubscribeMessage('claim_timeout')

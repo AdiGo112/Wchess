@@ -7,13 +7,14 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
-  const { player, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const toggleProfile = () => setProfileOpen(!profileOpen);
 
   const navLinks = [
     { path: "/", label: "Home" },
+    { path: "/lobby", label: "Play" },
     { path: "/leaderboard", label: "Leaderboard" },
     { path: "/history", label: "Games" },
   ];
@@ -47,16 +48,16 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {player ? (
+          {user ? (
             <div className="relative">
               <button
                 onClick={toggleProfile}
                 className="flex items-center gap-2 bg-gray-800 px-3 py-2 rounded-lg hover:bg-gray-700 transition"
               >
                 <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm">
-                  {player.name ? player.name[0].toUpperCase() : "P"}
+                  {user.name ? user.name[0].toUpperCase() : "P"}
                 </div>
-                <span className="text-sm">{player.name || "Player"}</span>
+                <span className="text-sm">{user.name || "Player"}</span>
                 <ChevronDown size={16} className="text-gray-300" />
               </button>
 
@@ -73,9 +74,10 @@ export default function Navbar() {
                     View Profile
                   </button>
                   <button
-                    onClick={() => {
-                      logout();
+                    onClick={async () => {
+                      await logout();
                       setProfileOpen(false);
+                      navigate("/login");
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 transition"
                   >
@@ -122,7 +124,7 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {player ? (
+          {user ? (
             <>
               <button
                 onClick={() => {
@@ -134,9 +136,10 @@ export default function Navbar() {
                 <User size={16} /> Profile
               </button>
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   setMenuOpen(false);
+                  navigate("/login");
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition"
               >

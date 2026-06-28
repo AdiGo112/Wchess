@@ -1,8 +1,19 @@
-import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
+import { LocalAuthGuard } from './local-auth.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('auth')
@@ -11,15 +22,33 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with username + password' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  @ApiBody({ type: LoginDto })
+  login(@Request() req: any) {
+    return this.authService.login(req.user);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate refresh token and issue new access token' })
+  refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revoke all refresh tokens for current user' })
+  async logout(@Body() dto: RefreshDto) {
+    await this.authService.logoutByRefreshToken(dto.refreshToken);
   }
 
   @Get('me')

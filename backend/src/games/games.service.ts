@@ -17,8 +17,11 @@ export interface ActiveRoom {
   increment: number;
   startedAt: number;
   drawOfferedBy: 'white' | 'black' | null;
+  rematchRequestedBy: string | null;
   spectatorCount: number;
   variant: string;
+  /** Stockfish difficulty (1-5) for computer games; undefined for human games. */
+  difficulty?: number;
 }
 
 const ROOM_TTL = 86400;
@@ -50,6 +53,7 @@ export class GamesService {
     blackPlayer: { id: string; username: string; rating: number },
     timeControl: number,
     increment = 0,
+    difficulty?: number,
   ): Promise<ActiveRoom> {
     const { customAlphabet } = await import('nanoid');
     const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 6);
@@ -69,12 +73,34 @@ export class GamesService {
       increment,
       startedAt: Date.now(),
       drawOfferedBy: null,
+      rematchRequestedBy: null,
       spectatorCount: 0,
       variant,
+      difficulty,
     };
 
     await this.setRoom(room);
     return room;
+  }
+
+  /**
+   * Create a vs-computer room. Black is the Stockfish engine (id 'computer',
+   * which the game gateway recognizes to dispatch engine moves). The chosen
+   * difficulty is persisted on the room for the Stockfish worker.
+   */
+  async createComputerRoom(
+    player: { id: string; username: string; rating: number },
+    difficulty: number,
+    timeControl: number,
+    increment = 0,
+  ): Promise<ActiveRoom> {
+    return this.createRoom(
+      player,
+      { id: 'computer', username: 'Stockfish', rating: 1500 },
+      timeControl,
+      increment,
+      difficulty,
+    );
   }
 
   async saveCompletedGame(params: {

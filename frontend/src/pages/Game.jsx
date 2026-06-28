@@ -1,46 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ChessGame from "../components/ChessGame";
-import { useSocket } from "../context/SocketContext";
-import { useAuth } from "../context/AuthContext";
 
 export default function Game() {
   const navigate = useNavigate();
   const location = useLocation();
   const { roomId: routeRoomId } = useParams();
-  const { socket } = useSocket();
-  const { user } = useAuth();
 
-  const [roomId, setRoomId] = useState(routeRoomId || location.state?.roomId);
+  const [roomId] = useState(routeRoomId || location.state?.roomId);
   const { mode, timeControl } = location.state || {};
 
+  // Matchmaking now lives in the Lobby; the game page only renders a known room.
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    if (!socket) return;
-
-    if (!roomId && mode === "online" && timeControl) {
-      socket.emit("join_queue", { timeControl });
-
-      socket.on("match_found", (data) => {
-        setRoomId(data.roomId);
-        socket.off("match_found");
-      });
-
-      return () => socket.off("match_found");
-    }
-
-    if (!roomId && mode === "computer" && timeControl) {
-      // Create vs-computer room
-      socket.emit("create_room", { timeControl, vsComputer: true, difficulty: 2 });
-      socket.on("room_created", (data) => {
-        setRoomId(data.roomId);
-        socket.off("room_created");
-      });
-      return () => socket.off("room_created");
-    }
-  }, [socket, user, mode, timeControl, roomId, navigate]);
-
-  if (!user) return null;
+    if (!roomId) navigate("/lobby", { replace: true });
+  }, [roomId, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
