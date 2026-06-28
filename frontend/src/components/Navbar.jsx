@@ -14,6 +14,7 @@ export default function Navbar() {
 
   const navLinks = [
     { path: "/", label: "Home" },
+    { path: "/lobby", label: "Play" },
     { path: "/leaderboard", label: "Leaderboard" },
     { path: "/history", label: "Games" },
   ];

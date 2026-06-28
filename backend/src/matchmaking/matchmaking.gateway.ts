@@ -5,113 +5,111 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayInit,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MatchmakingService } from './matchmaking.service';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { JoinQueueDto, LeaveQueueDto } from './dto/join-queue.dto';
 
+/**
+ * Shares the default Socket.io namespace with GameGateway, which authenticates
+ * the handshake and populates `client.data.userId` / `client.data.username`.
+ */
 @WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true },
+  cors: {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    credentials: true,
+  },
 })
-export class MatchmakingGateway implements OnGatewayInit {
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(MatchmakingGateway.name);
-  private matchInterval: NodeJS.Timeout;
 
   constructor(
-    private matchmaking: MatchmakingService,
-    private prisma: PrismaService,
+    private readonly matchmaking: MatchmakingService,
+    private readonly prisma: PrismaService,
   ) {}
 
   afterInit(server: Server) {
+    // The polling loop lives in the service; the gateway only lends it the
+    // server instance so it can emit `match_found`.
     this.matchmaking.setServer(server);
+  }
 
-    // Poll every 500ms for matches across all time controls
-    this.matchInterval = setInterval(async () => {
-      await Promise.all([
-        this.matchmaking.tryMatch(60),   // bullet
-        this.matchmaking.tryMatch(180),  // blitz 3min
-        this.matchmaking.tryMatch(300),  // blitz 5min
-        this.matchmaking.tryMatch(600),  // blitz 10min
-        this.matchmaking.tryMatch(900),  // rapid 15min
-        this.matchmaking.tryMatch(1800), // rapid 30min
-        this.matchmaking.tryMatch(3600), // classical
-      ]);
-    }, 500);
+  async handleDisconnect(client: Socket) {
+    const userId = client.data.userId;
+    // Single-queue invariant means at most one entry, but sweep all queues so
+    // a leaked entry can never outlive the socket.
+    if (userId) {
+      await this.matchmaking.leaveAllQueues(userId);
+    }
   }
 
   @SubscribeMessage('join_queue')
   async handleJoinQueue(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { timeControl: number },
+    @MessageBody() data: JoinQueueDto,
   ) {
     const userId = client.data.userId;
     const username = client.data.username;
-    if (!userId) return;
+    if (!userId) {
+      return client.emit('error', { message: 'Not authenticated' });
+    }
 
-    const rating = await this.getUserRating(userId, data.timeControl);
+    const variant = this.matchmaking.variantOf(data.timeControl);
 
-    await this.matchmaking.joinQueue({
+    // DOMAIN error ALREADY_IN_QUEUE: a no-op re-join of the same queue would
+    // otherwise reset the player's accrued wait time / tolerance.
+    if (await this.matchmaking.isQueued(userId, variant, data.timeControl)) {
+      return client.emit('error', {
+        code: 'ALREADY_IN_QUEUE',
+        message: 'Already in this queue',
+      });
+    }
+
+    const rating = await this.getUserRating(userId, variant);
+
+    await this.matchmaking.enqueue({
       userId,
       username,
       rating,
       socketId: client.id,
-      joinedAt: Date.now(),
+      enqueuedAt: Date.now(),
+      variant,
       timeControl: data.timeControl,
+      increment: data.increment ?? 0,
     });
 
-    client.emit('queued', { timeControl: data.timeControl });
-    this.logger.log(`${username} joined queue for ${data.timeControl}s`);
+    client.emit('queued', { variant, timeControl: data.timeControl });
   }
 
   @SubscribeMessage('leave_queue')
   async handleLeaveQueue(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { timeControl: number },
+    @MessageBody() data: LeaveQueueDto,
   ) {
     const userId = client.data.userId;
     if (!userId) return;
-    await this.matchmaking.leaveQueue(userId, data.timeControl);
-    client.emit('left_queue', {});
+
+    const variant = this.matchmaking.variantOf(data.timeControl);
+    await this.matchmaking.dequeue(userId, variant, data.timeControl);
+
+    client.emit('left_queue', { variant, timeControl: data.timeControl });
   }
 
-  @SubscribeMessage('create_room')
-  async handleCreateRoom(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { timeControl: number; vsComputer: boolean; difficulty?: number },
-  ) {
-    const userId = client.data.userId;
-    const username = client.data.username;
-    if (!userId) return;
-
-    const rating = await this.getUserRating(userId, data.timeControl);
-
-    const movetime = data.difficulty === 1 ? 100 : data.difficulty === 3 ? 3000 : 1000;
-
-    const { GamesService } = await import('../games/games.service');
-    const room = await (this as any).gamesService.createRoom(
-      { id: userId, username, rating },
-      data.vsComputer
-        ? { id: 'computer', username: 'Stockfish', rating: 2800 }
-        : null,
-      data.timeControl,
-    );
-
-    client.emit('room_created', { roomId: room.id, color: 'white' });
-  }
-
-  private async getUserRating(userId: string, timeControl: number): Promise<number> {
-    const variantMap: Record<number, string> = {};
-    let variant = 'BLITZ';
-    if (timeControl < 180) variant = 'BULLET';
-    else if (timeControl < 600) variant = 'BLITZ';
-    else if (timeControl < 1800) variant = 'RAPID';
-    else variant = 'CLASSICAL';
-
-    const r = await this.prisma.userRating.findUnique({
-      where: { userId_variant: { userId, variant: variant as any } },
+  /** Glicko-2 rating for the queue's variant; 1200 default if unrated. */
+  private async getUserRating(
+    userId: string,
+    variant: string,
+  ): Promise<number> {
+    const row = await this.prisma.userRating.findUnique({
+      where: {
+        userId_variant: { userId, variant: variant.toUpperCase() as any },
+      },
     });
-    return r?.rating ?? 1200;
+    return row?.rating ?? 1200;
   }
 }

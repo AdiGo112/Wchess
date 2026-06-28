@@ -47,7 +47,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.username = payload.username;
 
       await this.redis.set(`socket:${client.id}`, payload.sub, 3600);
-      await this.redis.set(`user:socket:${payload.sub}`, client.id, 3600);
+      // No TTL: this mapping must outlive any session length (it's used to
+      // deliver e.g. challenge_accepted) and is explicitly deleted on disconnect.
+      await this.redis.set(`user:socket:${payload.sub}`, client.id);
       await this.redis.set(`online:${payload.sub}`, '1', 30);
 
       this.logger.log(`Client connected: ${payload.username} (${client.id})`);
