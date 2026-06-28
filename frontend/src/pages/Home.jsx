@@ -1,10 +1,8 @@
-import React, { useState } from "react";
-import GameSetup from "../components/GameControls";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Home() {
-  const [newGame, setNewGame] = useState(false);
-
-  if (newGame) return <GameSetup />;
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex flex-col items-center justify-center">
@@ -13,7 +11,7 @@ export default function Home() {
       </h1>
 
       <button
-        onClick={() => setNewGame(true)}
+        onClick={() => navigate("/lobby")}
         className="bg-indigo-600 hover:bg-indigo-700 px-8 py-3 rounded-lg text-lg font-semibold shadow-md transition-all duration-200"
       >
         New Game
