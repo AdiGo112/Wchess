@@ -17,6 +17,7 @@ export interface ActiveRoom {
   increment: number;
   startedAt: number;
   drawOfferedBy: 'white' | 'black' | null;
+  rematchRequestedBy: string | null;
   spectatorCount: number;
   variant: string;
 }
@@ -69,6 +70,7 @@ export class GamesService {
       increment,
       startedAt: Date.now(),
       drawOfferedBy: null,
+      rematchRequestedBy: null,
       spectatorCount: 0,
       variant,
     };
