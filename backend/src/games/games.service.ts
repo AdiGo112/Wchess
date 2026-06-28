@@ -20,6 +20,8 @@ export interface ActiveRoom {
   rematchRequestedBy: string | null;
   spectatorCount: number;
   variant: string;
+  /** Stockfish difficulty (1-5) for computer games; undefined for human games. */
+  difficulty?: number;
 }
 
 const ROOM_TTL = 86400;
@@ -75,6 +77,28 @@ export class GamesService {
       variant,
     };
 
+    await this.setRoom(room);
+    return room;
+  }
+
+  /**
+   * Create a vs-computer room. Black is the Stockfish engine (id 'computer',
+   * which the game gateway recognizes to dispatch engine moves). The chosen
+   * difficulty is persisted on the room for the Stockfish worker.
+   */
+  async createComputerRoom(
+    player: { id: string; username: string; rating: number },
+    difficulty: number,
+    timeControl: number,
+    increment = 0,
+  ): Promise<ActiveRoom> {
+    const room = await this.createRoom(
+      player,
+      { id: 'computer', username: 'Stockfish', rating: 1500 },
+      timeControl,
+      increment,
+    );
+    room.difficulty = difficulty;
     await this.setRoom(room);
     return room;
   }

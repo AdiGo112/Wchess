@@ -3,12 +3,21 @@ import {
   Logger,
   OnModuleInit,
   OnModuleDestroy,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { Server } from 'socket.io';
 import { RedisService } from '../common/redis/redis.service';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { GamesService } from '../games/games.service';
 import { variantFromTimeControl } from '../common/utils/elo';
 import { QueueEntry } from './types/queue-entry.interface';
+import { CreateChallengeDto } from './dto/create-challenge.dto';
+import { CreateComputerGameDto } from './dto/create-computer-game.dto';
+
+const CHALLENGE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /** Sorted-by-wait candidate paired with its exact Redis payload (for LREM). */
 interface Candidate {
@@ -33,6 +42,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly redis: RedisService,
+    private readonly prisma: PrismaService,
     private readonly gamesService: GamesService,
   ) {}
 
@@ -195,5 +205,179 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
         rating: opponent.rating,
       },
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Increment 2 — friend challenges & computer games (REST-driven)
+  // ---------------------------------------------------------------------------
+
+  /** Emit to a user's live socket using GameGateway's `user:socket:` mapping. */
+  async notifyUser(
+    userId: string,
+    event: string,
+    payload: unknown,
+  ): Promise<void> {
+    if (!this.server) return;
+    const socketId = await this.redis.get(`user:socket:${userId}`);
+    if (socketId) this.server.to(socketId).emit(event, payload);
+  }
+
+  /** Build a game-room player from a user id, rated for the given time control. */
+  private async buildPlayer(userId: string, timeControl: number) {
+    const variant = variantFromTimeControl(timeControl);
+    const [user, ratingRow] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true },
+      }),
+      this.prisma.userRating.findUnique({
+        where: { userId_variant: { userId, variant: variant as any } },
+      }),
+    ]);
+    return {
+      id: userId,
+      username: user?.username ?? 'Player',
+      rating: ratingRow?.rating ?? 1200,
+    };
+  }
+
+  async createChallenge(creatorId: string, dto: CreateChallengeDto) {
+    const token = randomBytes(16).toString('hex');
+    const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
+
+    await this.prisma.challenge.create({
+      data: {
+        token,
+        creatorId,
+        variant: dto.variant,
+        timeControl: dto.timeControl,
+        increment: dto.increment ?? 0,
+        creatorColor: dto.creatorColor ?? 'random',
+        status: 'pending',
+        expiresAt,
+      },
+    });
+
+    const base =
+      process.env.FRONTEND_URL ||
+      process.env.CORS_ORIGIN ||
+      'http://localhost:5173';
+    return { token, shareUrl: `${base}/challenge/${token}`, expiresAt };
+  }
+
+  async acceptChallenge(token: string, accepterId: string) {
+    const challenge = await this.prisma.challenge.findUnique({
+      where: { token },
+    });
+    if (!challenge) {
+      throw new NotFoundException({
+        code: 'CHALLENGE_NOT_FOUND',
+        message: 'Challenge not found',
+      });
+    }
+    if (new Date() > challenge.expiresAt) {
+      // Best-effort mark; expired challenges are treated as gone (404).
+      await this.prisma.challenge
+        .update({ where: { token }, data: { status: 'expired' } })
+        .catch(() => undefined);
+      throw new NotFoundException({
+        code: 'CHALLENGE_EXPIRED',
+        message: 'Challenge has expired',
+      });
+    }
+    if (challenge.status !== 'pending') {
+      throw new ConflictException({
+        code: 'CHALLENGE_ALREADY_ACCEPTED',
+        message: 'Challenge already accepted',
+      });
+    }
+    if (challenge.creatorId === accepterId) {
+      throw new ForbiddenException({
+        code: 'CANNOT_ACCEPT_OWN_CHALLENGE',
+        message: 'You cannot accept your own challenge',
+      });
+    }
+
+    // Resolve colors per creatorColor preference.
+    let whiteId: string;
+    let blackId: string;
+    if (challenge.creatorColor === 'white') {
+      whiteId = challenge.creatorId;
+      blackId = accepterId;
+    } else if (challenge.creatorColor === 'black') {
+      whiteId = accepterId;
+      blackId = challenge.creatorId;
+    } else {
+      [whiteId, blackId] =
+        Math.random() < 0.5
+          ? [challenge.creatorId, accepterId]
+          : [accepterId, challenge.creatorId];
+    }
+
+    const [whitePlayer, blackPlayer] = await Promise.all([
+      this.buildPlayer(whiteId, challenge.timeControl),
+      this.buildPlayer(blackId, challenge.timeControl),
+    ]);
+
+    const room = await this.gamesService.createRoom(
+      whitePlayer,
+      blackPlayer,
+      challenge.timeControl,
+      challenge.increment,
+    );
+
+    await this.prisma.challenge.update({
+      where: { token },
+      data: { status: 'accepted', gameId: room.id },
+    });
+
+    const creatorColor =
+      whiteId === challenge.creatorId ? 'white' : 'black';
+    const accepterColor = whiteId === accepterId ? 'white' : 'black';
+
+    // Notify the (waiting) creator so they can navigate into the game.
+    await this.notifyUser(challenge.creatorId, 'challenge_accepted', {
+      roomId: room.id,
+      color: creatorColor,
+    });
+
+    this.logger.log(
+      `Challenge ${token} accepted → room ${room.id} ` +
+        `(creator=${creatorColor}, accepter=${accepterColor})`,
+    );
+
+    return { gameId: room.id, color: accepterColor };
+  }
+
+  async createComputerGame(userId: string, dto: CreateComputerGameDto) {
+    const player = await this.buildPlayer(userId, dto.timeControl);
+    const room = await this.gamesService.createComputerRoom(
+      player,
+      dto.difficulty,
+      dto.timeControl,
+      dto.increment ?? 0,
+    );
+    this.logger.log(
+      `Computer game ${room.id} for ${player.username} (difficulty ${dto.difficulty})`,
+    );
+    return { gameId: room.id };
+  }
+
+  /** Best-effort: is this user sitting in any active queue right now? */
+  async getQueueStatus(userId: string) {
+    for (const key of [...this.activeKeys]) {
+      const raw = await this.redis.lrange(key, 0, -1);
+      const idx = raw.findIndex((r) => this.parse(r)?.userId === userId);
+      if (idx !== -1) {
+        const [, variant, timeControl] = key.split(':');
+        return {
+          inQueue: true,
+          variant,
+          timeControl: Number(timeControl),
+          position: idx + 1,
+        };
+      }
+    }
+    return { inQueue: false, variant: null, timeControl: null, position: null };
   }
 }
