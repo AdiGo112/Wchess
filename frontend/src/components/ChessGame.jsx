@@ -4,6 +4,7 @@ import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
+import useStockfish from "../hooks/useStockfish";
 
 export default function ChessGame({ roomId, mode, timeControl }) {
   const navigate = useNavigate();
@@ -20,9 +21,13 @@ export default function ChessGame({ roomId, mode, timeControl }) {
   const [players, setPlayers] = useState({ white: null, black: null });
   const [moveHistory, setMoveHistory] = useState([]);
   const [status, setStatus] = useState("Waiting for opponent...");
+  const [difficulty, setDifficulty] = useState(null); // non-null ⇒ vs-computer
+  const [thinking, setThinking] = useState(false);
 
   const clockRef = useRef(null);
   const turnRef = useRef("w");
+
+  const getBestMove = useStockfish(difficulty !== null, difficulty ?? 3);
 
   const stopClock = useCallback(() => {
     if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
@@ -51,6 +56,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       setPlayers({ white: data.white, black: data.black });
       setTimers(data.timers || { white: (timeControl || 300) * 1000, black: (timeControl || 300) * 1000 });
       setStatus("Game in progress");
+      setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
       if (user && data.black?.id === user.id) setOrientation("black");
       startClock();
     });
@@ -90,6 +96,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       setPlayers({ white: data.white, black: data.black });
       setDrawOfferedBy(data.drawOfferedBy ?? null);
       setStatus("Game in progress");
+      setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
       startClock();
     });
 
@@ -108,6 +115,25 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       stopClock();
     };
   }, [socket, roomId, user, navigate, startClock, stopClock, timeControl]);
+
+  // vs-computer: think locally on black's turn, then relay the engine's move.
+  // The server re-validates it (see GameGateway.handleComputerMove).
+  useEffect(() => {
+    if (difficulty === null || !socket || !roomId || gameOver || fen === "start") return undefined;
+
+    const chess = new Chess(fen);
+    if (chess.turn() !== "b" || chess.isGameOver()) return undefined;
+
+    let cancelled = false;
+    setThinking(true);
+    getBestMove(fen).then((move) => {
+      if (cancelled) return;
+      setThinking(false);
+      if (move) socket.emit("computer_move", { roomId, ...move });
+    });
+
+    return () => { cancelled = true; };
+  }, [fen, difficulty, socket, roomId, gameOver, getBestMove]);
 
   const isDraggablePiece = useCallback(
     ({ piece }) => !gameOver && piece.startsWith(orientation === "white" ? "w" : "b"),
@@ -242,6 +268,10 @@ export default function ChessGame({ roomId, mode, timeControl }) {
               <button onClick={handleDeclineDraw} className="flex-1 bg-red-600 hover:bg-red-500 py-1 rounded">Decline</button>
             </div>
           </div>
+        )}
+
+        {thinking && !gameOver && (
+          <p className="text-center text-indigo-400 text-sm animate-pulse">Stockfish is thinking…</p>
         )}
 
         <p className="text-center text-gray-400 text-sm">{status}</p>

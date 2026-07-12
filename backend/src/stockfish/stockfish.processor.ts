@@ -7,24 +7,9 @@ import { Chess } from 'chess.js';
 export class StockfishProcessor {
   private readonly logger = new Logger(StockfishProcessor.name);
 
-  @Process('computer-move')
-  async handleComputerMove(job: Job<{ fen: string; roomId: string; movetime: number }>) {
-    const { fen, roomId, movetime } = job.data;
-    this.logger.log(`Computing move for room ${roomId}`);
-
-    try {
-      const move = await this.getBestMove(fen, movetime);
-      if (move) {
-        // Lazy import to avoid circular dep
-        const { GameGateway } = await import('../games/game.gateway');
-        // The processor publishes via Redis pub/sub; the gateway listens
-        // For simplicity in this implementation, we use the server directly
-        this.logger.log(`Best move for ${roomId}: ${move}`);
-      }
-    } catch (err) {
-      this.logger.error(`Stockfish error: ${err.message}`);
-    }
-  }
+  // ponytail: no computer-move job here — per ADR-0009 computer games run Stockfish
+  // WASM in the player's browser and relay the move over the 'computer_move' socket
+  // event. This processor is analysis-only.
 
   @Process('analysis')
   async handleAnalysis(job: Job<{ fen: string; depth: number; userId: string }>) {
@@ -38,24 +23,5 @@ export class StockfishProcessor {
     if (legalMoves.length === 0) return null;
     const move = legalMoves[Math.floor(Math.random() * legalMoves.length)];
     return { bestmove: move.san, evaluation: 0 };
-  }
-
-  private async getBestMove(fen: string, movetime: number): Promise<string | null> {
-    const chess = new Chess(fen);
-    const legalMoves = chess.moves({ verbose: true });
-    if (legalMoves.length === 0) return null;
-
-    // Deterministic "best" move heuristic when native Stockfish not available:
-    // Prefer captures > checks > random
-    const captures = legalMoves.filter(m => m.captured);
-    const checks = legalMoves.filter(m => {
-      const test = new Chess(fen);
-      test.move({ from: m.from, to: m.to, promotion: 'q' });
-      return test.inCheck();
-    });
-
-    const candidates = captures.length > 0 ? captures : checks.length > 0 ? checks : legalMoves;
-    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    return `${chosen.from}${chosen.to}${chosen.promotion || ''}`;
   }
 }

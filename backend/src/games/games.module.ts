@@ -4,12 +4,10 @@ import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
 import { GameGateway } from './game.gateway';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
-import { StockfishModule } from '../stockfish/stockfish.module';
 
 @Module({
   imports: [
     LeaderboardModule,
-    StockfishModule,
     JwtModule.registerAsync({
       useFactory: () => {
         const secret = process.env.JWT_SECRET;

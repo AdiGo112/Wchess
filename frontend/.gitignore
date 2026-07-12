@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Stockfish WASM — copied from node_modules by scripts/copy-engine.mjs on dev/build
+public/engine
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

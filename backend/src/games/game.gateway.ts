@@ -13,7 +13,6 @@ import { Chess } from 'chess.js';
 import { JwtService } from '@nestjs/jwt';
 import { GamesService, ActiveRoom } from './games.service';
 import { RedisService } from '../common/redis/redis.service';
-import { StockfishService } from '../stockfish/stockfish.service';
 
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true },
@@ -28,7 +27,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private gamesService: GamesService,
     private redis: RedisService,
     private jwtService: JwtService,
-    private stockfish: StockfishService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -128,6 +126,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timers: room.timers,
         moves: room.moves,
         drawOfferedBy: room.drawOfferedBy,
+        difficulty: room.difficulty,
       });
       return;
     }
@@ -148,6 +147,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       timeControl: room.timeControl,
       increment: room.increment,
       timers: room.timers,
+      difficulty: room.difficulty,
     });
   }
 
@@ -226,15 +226,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (chess.isInsufficientMaterial()) return this.endGame(room, 'DRAW', 'INSUFFICIENT_MATERIAL');
       if (chess.isThreefoldRepetition()) return this.endGame(room, 'DRAW', 'THREEFOLD_REPETITION');
       if (chess.isDraw()) return this.endGame(room, 'DRAW', 'FIFTY_MOVE');
-
-      // Stockfish computer move
-      if (room.blackPlayer?.id === 'computer' && chess.turn() === 'b') {
-        await this.stockfish.queueMove({
-          fen: room.fen,
-          roomId: room.id,
-          movetime: 1000,
-        });
-      }
     } catch (e) {
       client.emit('invalid_move', { roomId: data.roomId, reason: 'Invalid move format' });
     }
@@ -371,33 +362,56 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  async emitComputerMove(roomId: string, moveSan: string) {
-    const room = await this.gamesService.getRoom(roomId);
+  /**
+   * The engine runs as Stockfish WASM in the human player's browser (ADR-0009), so
+   * its reply arrives over that player's own socket. Everything is re-validated here:
+   * a client can only relay a move for the computer, in its own vs-computer room, on
+   * the computer's turn, and chess.js still rules on legality. A tampered client can
+   * therefore only make its own opponent play badly — and computer games are unrated
+   * (see endGame), so there is nothing to gain.
+   */
+  @SubscribeMessage('computer_move')
+  async handleComputerMove(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string; from: string; to: string; promotion?: string },
+  ) {
+    const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active') return;
+    if (room.blackPlayer?.id !== 'computer') return;
+    if (room.whitePlayer.id !== client.data.userId) return;
 
     const chess = new Chess(room.fen);
-    const move = chess.move(moveSan);
+    if (chess.turn() !== 'b') return;
+
+    const move = chess.move({
+      from: data.from,
+      to: data.to,
+      promotion: data.promotion || 'q',
+    });
     if (!move) return;
 
     const now = Date.now();
     const elapsed = now - room.lastMoveAt;
-    room.timers.black = Math.max(0, room.timers.black - elapsed);
+    room.timers.black = Math.max(0, room.timers.black - elapsed) + room.increment * 1000;
     room.fen = chess.fen();
     room.moves.push(move.san);
     room.lastMoveAt = now;
 
     await this.gamesService.setRoom(room);
 
-    this.server.to(roomId).emit('move_made', {
-      roomId,
+    this.server.to(data.roomId).emit('move_made', {
+      roomId: room.id,
       move: { from: move.from, to: move.to, san: move.san, fen: room.fen, moveIndex: room.moves.length - 1 },
       fen: room.fen,
       timers: room.timers,
       check: chess.inCheck(),
+      drawOfferedBy: null,
     });
 
     if (chess.isCheckmate()) return this.endGame(room, 'BLACK', 'CHECKMATE');
     if (chess.isStalemate()) return this.endGame(room, 'DRAW', 'STALEMATE');
+    if (chess.isInsufficientMaterial()) return this.endGame(room, 'DRAW', 'INSUFFICIENT_MATERIAL');
+    if (chess.isThreefoldRepetition()) return this.endGame(room, 'DRAW', 'THREEFOLD_REPETITION');
     if (chess.isDraw()) return this.endGame(room, 'DRAW', 'FIFTY_MOVE');
   }
 

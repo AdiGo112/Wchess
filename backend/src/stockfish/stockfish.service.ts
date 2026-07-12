@@ -16,14 +16,6 @@ export class StockfishService {
 
   constructor(@InjectQueue('stockfish') private stockfishQueue: Queue) {}
 
-  async queueMove(params: { fen: string; roomId: string; movetime: number }) {
-    await this.stockfishQueue.add('computer-move', {
-      fen: params.fen,
-      roomId: params.roomId,
-      movetime: params.movetime,
-    });
-  }
-
   async queueAnalysis(params: { fen: string; depth: number; userId: string }) {
     const job = await this.stockfishQueue.add('analysis', {
       fen: params.fen,
