@@ -34,37 +34,47 @@ export default function Login() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-      <h1 className="text-3xl mb-6 font-bold">Login</h1>
-      <form onSubmit={handleLogin} className="bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
-          required
-          className="w-full p-2 mb-3 rounded bg-gray-700 text-white"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          required
-          className="w-full p-2 mb-4 rounded bg-gray-700 text-white"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 py-2 rounded font-semibold"
-        >
-          {loading ? "Logging in..." : "Login"}
+    <div className="flex flex-col items-center justify-center min-h-[70vh]">
+      <h1 className="heading-b text-5xl mb-2">WELCOME</h1>
+      <p className="tag-b mb-8">back to the board</p>
+
+      <form onSubmit={handleLogin} className="card-b w-full max-w-sm space-y-4">
+        {error && <p className="error-b">{error}</p>}
+
+        <div>
+          <label className="label-b" htmlFor="login-username">Username</label>
+          <input
+            id="login-username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="your handle"
+            required
+            className="input-b"
+          />
+        </div>
+
+        <div>
+          <label className="label-b" htmlFor="login-password">Password</label>
+          <input
+            id="login-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            className="input-b"
+          />
+        </div>
+
+        <button type="submit" disabled={loading} className="btn-b btn-b-primary w-full">
+          {loading ? "Logging in…" : "Log in →"}
         </button>
-        <p className="mt-4 text-sm text-gray-400 text-center">
-          Don't have an account?{" "}
-          <Link to="/signup" className="text-blue-400 hover:underline font-medium">
-            Sign up here
+
+        <p className="text-xs font-medium text-neutral-500 text-center uppercase tracking-wider">
+          No account?{" "}
+          <Link to="/signup" className="text-ink font-bold underline decoration-2 underline-offset-2">
+            Sign up
           </Link>
         </p>
       </form>

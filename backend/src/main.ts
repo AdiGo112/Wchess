@@ -22,7 +22,7 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('ChessWeb API')
+    .setTitle('WChess API')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -31,7 +31,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`ChessWeb backend running on http://localhost:${port}`);
+  console.log(`WChess backend running on http://localhost:${port}`);
   console.log(`API docs: http://localhost:${port}/api/docs`);
 }
 
