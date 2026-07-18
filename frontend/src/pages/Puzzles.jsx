@@ -42,7 +42,7 @@ import { useNavigate } from "react-router-dom";
  *    streaks are the retention hook), themes revealed only AFTER solving
  *    (knowing "it's a fork" beforehand is a spoiler).
  *  - Daily mode: one shared puzzle per calendar day (seeded by date), everyone
- *    gets the same one, shareable result à la Wordle: "ChessWeb Daily #217 ✓
+ *    gets the same one, shareable result à la Wordle: "WChess Daily #217 ✓
  *    in 0:43" as copy-to-clipboard text. This is the growth loop.
  *  - Keyboard: arrows step through the post-solve replay; N = next puzzle.
  *

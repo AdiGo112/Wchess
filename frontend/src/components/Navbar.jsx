@@ -39,7 +39,7 @@ export default function Navbar() {
           <span className="inline-flex items-center justify-center w-9 h-9 bg-ink text-white text-xl border-[3px] border-ink shadow-brutal-sm group-hover:shadow-brutal transition-shadow">
             ♞
           </span>
-          <span className="font-display text-xl tracking-tight">CHESSWEB</span>
+          <span className="font-display text-xl tracking-tight">WCHESS</span>
         </div>
 
         {/* Desktop */}

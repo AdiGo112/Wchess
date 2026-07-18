@@ -19,7 +19,7 @@ export default function Game() {
     <div className="-mx-4 -my-8 min-h-screen flex flex-col">
       {/* Game header strip */}
       <div className="w-full flex justify-between items-center px-6 py-3 bg-ink text-white border-b-[3px] border-ink">
-        <h2 className="font-display text-lg tracking-tight">CHESSWEB</h2>
+        <h2 className="font-display text-lg tracking-tight">WCHESS</h2>
         <div className="flex gap-3 items-center">
           {mode && <span className="tag-b border-white text-white">{mode}</span>}
           {timeControl && (
