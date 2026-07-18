@@ -334,34 +334,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @SubscribeMessage('spectate')
-  async handleSpectate(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string },
-  ) {
-    const room = await this.gamesService.getRoom(data.roomId);
-    if (!room) return client.emit('error', { message: 'Room not found' });
-
-    client.join(`spec:${data.roomId}`);
-    room.spectatorCount += 1;
-    await this.gamesService.setRoom(room);
-
-    client.emit('game_start', {
-      roomId: room.id,
-      white: room.whitePlayer,
-      black: room.blackPlayer,
-      fen: room.fen,
-      timeControl: room.timeControl,
-      timers: room.timers,
-      moves: room.moves,
-    });
-
-    this.server.to(data.roomId).emit('spectator_count', {
-      roomId: room.id,
-      count: room.spectatorCount,
-    });
-  }
-
   /**
    * The engine runs as Stockfish WASM in the human player's browser (ADR-0009), so
    * its reply arrives over that player's own socket. Everything is re-validated here:

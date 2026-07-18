@@ -18,7 +18,6 @@ export interface ActiveRoom {
   startedAt: number;
   drawOfferedBy: 'white' | 'black' | null;
   rematchRequestedBy: string | null;
-  spectatorCount: number;
   variant: string;
   /** Stockfish difficulty (1-5) for computer games; undefined for human games. */
   difficulty?: number;
@@ -74,7 +73,6 @@ export class GamesService {
       startedAt: Date.now(),
       drawOfferedBy: null,
       rematchRequestedBy: null,
-      spectatorCount: 0,
       variant,
       difficulty,
     };

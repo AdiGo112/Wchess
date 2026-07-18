@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -14,20 +12,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U chess -d chessweb']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  mongo:
-    image: mongo:7
-    container_name: chessweb_mongo
-    ports:
-      - '27017:27017'
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
       interval: 5s
       timeout: 5s
       retries: 10
@@ -50,5 +34,4 @@ services:
 
 volumes:
   postgres_data:
-  mongo_data:
   redis_data:
