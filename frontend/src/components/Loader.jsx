@@ -2,8 +2,11 @@ import React from "react";
 
 export default function Loader() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
-      <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-paper gap-4">
+      <div className="loader-b" />
+      <p className="text-xs font-bold uppercase tracking-widest">
+        Loading<span className="animate-blink">_</span>
+      </p>
     </div>
   );
 }

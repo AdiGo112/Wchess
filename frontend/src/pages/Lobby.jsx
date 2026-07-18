@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Copy, Loader2 } from "lucide-react";
+import { Copy } from "lucide-react";
 import api from "../api";
 import useMatchmakingSocket from "../hooks/useMatchmakingSocket";
 import VariantSelector, { TIME_PRESETS } from "../components/VariantSelector";
@@ -13,9 +13,14 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-const Card = ({ title, children }) => (
-  <div className="flex-1 min-w-[260px] bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-md">
-    <h3 className="text-xl font-bold mb-4">{title}</h3>
+const Card = ({ index, title, children }) => (
+  <div className="flex-1 min-w-[280px] card-b">
+    <div className="flex items-baseline gap-2 mb-5">
+      <span className="font-display text-neutral-300 text-3xl leading-none select-none">
+        {String(index).padStart(2, "0")}
+      </span>
+      <h3 className="heading-b text-xl">{title}</h3>
+    </div>
     {children}
   </div>
 );
@@ -83,62 +88,67 @@ export default function Lobby() {
   };
 
   return (
-    <div className="text-white max-w-5xl mx-auto">
-      <h1 className="text-3xl font-extrabold mb-6 text-center">Play Chess</h1>
+    <div className="max-w-5xl mx-auto">
+      <h1 className="heading-b text-5xl md:text-6xl text-center mb-2">PICK YOUR FIGHT</h1>
+      <p className="text-center mb-10">
+        <span className="tag-b">three ways in. all of them rated-ish.</span>
+      </p>
 
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-8">
         {/* Card 1: Quick Match */}
-        <Card title="Quick Match">
+        <Card index={1} title="Quick match">
           {isSearching ? (
             <div className="text-center py-6">
-              <Loader2 className="animate-spin mx-auto mb-3 text-indigo-400" size={32} />
-              <p className="text-gray-300">Searching for opponent…</p>
-              <p className="text-2xl font-mono mt-1">{fmt(searchSeconds)}</p>
+              <div className="loader-b mx-auto mb-4" />
+              <p className="text-xs font-bold uppercase tracking-widest">
+                Hunting opponent<span className="animate-blink">_</span>
+              </p>
+              <p className="text-3xl font-mono font-bold mt-2">{fmt(searchSeconds)}</p>
               {position != null && (
-                <p className="text-sm text-gray-400 mt-1">Position: {position} in queue</p>
+                <p className="tag-b mt-2">#{position} in queue</p>
               )}
-              <button
-                onClick={leaveQueue}
-                className="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold"
-              >
-                Cancel
+              <button onClick={leaveQueue} className="btn-b btn-b-danger btn-b-sm mt-5">
+                Bail out
               </button>
             </div>
           ) : (
             <>
               <VariantSelector selected={quickPreset} onSelect={setQuickPreset} />
-              <button
-                onClick={findGame}
-                className="mt-4 w-full bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-semibold"
-              >
-                Find Game
+              <button onClick={findGame} className="btn-b btn-b-primary w-full mt-5">
+                Find game →
               </button>
             </>
           )}
         </Card>
 
         {/* Card 2: Play a Friend */}
-        <Card title="Play a Friend">
+        <Card index={2} title="Play a friend">
           {shareUrl ? (
-            <div className="text-center py-2">
-              <p className="text-sm text-gray-300 mb-2">Share this link with your friend:</p>
-              <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-2">
+            <div className="py-2">
+              <p className="label-b">Send this to your victim</p>
+              <div className="flex items-stretch border-[3px] border-ink">
                 <input
                   readOnly
                   value={shareUrl}
-                  className="flex-1 bg-transparent text-xs outline-none truncate"
+                  className="flex-1 bg-white px-2 py-2 text-xs font-mono outline-none truncate"
                 />
-                <button onClick={copyLink} className="text-indigo-400 hover:text-indigo-300" title="Copy">
-                  <Copy size={18} />
+                <button
+                  onClick={copyLink}
+                  className="bg-ink text-white px-3 hover:bg-neutral-700 transition-colors"
+                  title="Copy"
+                >
+                  <Copy size={16} />
                 </button>
               </div>
-              <div className="flex items-center justify-center gap-2 mt-4 text-gray-300">
-                <Loader2 className="animate-spin" size={18} />
-                <span>Waiting for opponent…</span>
+              <div className="flex items-center gap-3 mt-5">
+                <div className="loader-b !w-5 !h-5" />
+                <span className="text-xs font-bold uppercase tracking-widest">
+                  Waiting for opponent<span className="animate-blink">_</span>
+                </span>
               </div>
               <button
                 onClick={() => setShareUrl(null)}
-                className="mt-3 text-xs text-gray-400 hover:text-gray-200 underline"
+                className="mt-4 text-xs font-bold uppercase tracking-widest underline decoration-2 underline-offset-4"
               >
                 Create another
               </button>
@@ -146,20 +156,20 @@ export default function Lobby() {
           ) : (
             <>
               <VariantSelector selected={friendPreset} onSelect={setFriendPreset} />
-              <div className="mt-4">
-                <p className="text-sm text-gray-300 mb-1">Your color</p>
+              <div className="mt-5">
+                <p className="label-b">Your color</p>
                 <div className="flex gap-2">
                   {["white", "black", "random"].map((c) => (
                     <button
                       key={c}
                       onClick={() => setCreatorColor(c)}
-                      className={`flex-1 capitalize px-2 py-2 rounded-lg border text-sm transition ${
+                      className={`flex-1 capitalize px-2 py-2 border-[3px] border-ink text-xs font-bold uppercase tracking-wider transition-all ${
                         creatorColor === c
-                          ? "bg-indigo-600 border-indigo-500"
-                          : "border-gray-600 hover:border-indigo-400"
+                          ? "bg-ink text-white shadow-brutal-sm"
+                          : "bg-white hover:shadow-brutal-sm"
                       }`}
                     >
-                      {c}
+                      {c === "white" ? "♔ White" : c === "black" ? "♚ Black" : "? Random"}
                     </button>
                   ))}
                 </div>
@@ -167,28 +177,28 @@ export default function Lobby() {
               <button
                 onClick={createChallenge}
                 disabled={creating}
-                className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 px-4 py-3 rounded-lg font-semibold"
+                className="btn-b btn-b-primary w-full mt-5"
               >
-                {creating ? "Creating…" : "Create Challenge Link"}
+                {creating ? "Creating…" : "Get challenge link →"}
               </button>
             </>
           )}
         </Card>
 
         {/* Card 3: Play Computer */}
-        <Card title="Play Computer">
-          <p className="text-sm text-gray-300 mb-2">Difficulty</p>
+        <Card index={3} title="Fight the machine">
+          <p className="label-b">Difficulty</p>
           <DifficultySlider value={difficulty} onChange={setDifficulty} />
           <div className="mt-5">
-            <p className="text-sm text-gray-300 mb-2">Time control</p>
+            <p className="label-b">Time control</p>
             <VariantSelector selected={computerPreset} onSelect={setComputerPreset} />
           </div>
           <button
             onClick={startComputer}
             disabled={starting}
-            className="mt-4 w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 px-4 py-3 rounded-lg font-semibold"
+            className="btn-b btn-b-primary w-full mt-5"
           >
-            {starting ? "Starting…" : "Start Game"}
+            {starting ? "Booting engine…" : "Start game →"}
           </button>
         </Card>
       </div>

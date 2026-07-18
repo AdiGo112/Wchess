@@ -15,63 +15,67 @@ export default function Navbar() {
   const navLinks = [
     { path: "/", label: "Home" },
     { path: "/lobby", label: "Play" },
-    { path: "/leaderboard", label: "Leaderboard" },
+    { path: "/leaderboard", label: "Ranks" },
     { path: "/history", label: "Games" },
+    { path: "/puzzles", label: "Puzzles", soon: true },
+    { path: "/tournaments", label: "Arena", soon: true },
   ];
 
+  const linkClass = ({ isActive }) =>
+    `text-xs font-bold uppercase tracking-widest px-3 py-2 border-2 transition-all ${
+      isActive
+        ? "bg-ink text-white border-ink"
+        : "border-transparent hover:border-ink"
+    }`;
+
   return (
-    <nav className="w-full bg-gray-900/80 backdrop-blur-lg shadow-lg text-white sticky top-0 z-50">
-      <div className="container mx-auto px-6 py-3 flex items-center justify-between">
-        {/* Logo */}
+    <nav className="w-full bg-paper border-b-[3px] border-ink sticky top-0 z-50">
+      <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+        {/* Logo — glyph in a hard-shadowed box */}
         <div
           onClick={() => navigate("/")}
-          className="text-2xl font-bold text-indigo-400 cursor-pointer select-none"
+          className="flex items-center gap-2 cursor-pointer select-none group"
         >
-          ♟ ChessWeb
+          <span className="inline-flex items-center justify-center w-9 h-9 bg-ink text-white text-xl border-[3px] border-ink shadow-brutal-sm group-hover:shadow-brutal transition-shadow">
+            ♞
+          </span>
+          <span className="font-display text-xl tracking-tight">CHESSWEB</span>
         </div>
 
-        {/* Desktop Menu */}
-        <div className="hidden md:flex items-center gap-6 relative">
-          {navLinks.map(({ path, label }) => (
-            <NavLink
-              key={path}
-              to={path}
-              className={({ isActive }) =>
-                `text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? "text-indigo-400 border-b-2 border-indigo-400 pb-1"
-                    : "text-gray-300 hover:text-indigo-300"
-                }`
-              }
-            >
+        {/* Desktop */}
+        <div className="hidden md:flex items-center gap-1 relative">
+          {navLinks.map(({ path, label, soon }) => (
+            <NavLink key={path} to={path} className={linkClass}>
               {label}
+              {soon && <sup className="ml-0.5 text-[8px]">soon</sup>}
             </NavLink>
           ))}
 
           {user ? (
-            <div className="relative">
+            <div className="relative ml-3">
               <button
                 onClick={toggleProfile}
-                className="flex items-center gap-2 bg-gray-800 px-3 py-2 rounded-lg hover:bg-gray-700 transition"
+                className="flex items-center gap-2 border-[3px] border-ink bg-white px-3 py-1.5 shadow-brutal-sm hover:shadow-brutal transition-shadow"
               >
-                <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-sm">
+                <span className="w-6 h-6 bg-ink text-white flex items-center justify-center font-display text-xs">
                   {user.name ? user.name[0].toUpperCase() : "P"}
-                </div>
-                <span className="text-sm">{user.name || "Player"}</span>
-                <ChevronDown size={16} className="text-gray-300" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  {user.name || "Player"}
+                </span>
+                <ChevronDown size={14} />
               </button>
 
-              {/* Profile Dropdown */}
               {profileOpen && (
-                <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden">
+                <div className="absolute right-0 mt-2 w-44 bg-white border-[3px] border-ink shadow-brutal">
                   <button
                     onClick={() => {
                       navigate("/profile");
                       setProfileOpen(false);
                     }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 transition"
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-ink hover:text-white transition-colors"
                   >
-                    View Profile
+                    Profile
                   </button>
                   <button
                     onClick={async () => {
@@ -79,9 +83,9 @@ export default function Navbar() {
                       setProfileOpen(false);
                       navigate("/login");
                     }}
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 transition"
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-t-2 border-ink hover:bg-ink hover:text-white transition-colors"
                   >
-                    <LogOut size={14} className="inline mr-1" /> Logout
+                    <LogOut size={12} className="inline mr-1 -mt-0.5" /> Log out
                   </button>
                 </div>
               )}
@@ -89,74 +93,78 @@ export default function Navbar() {
           ) : (
             <button
               onClick={() => navigate("/login")}
-              className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 transition"
+              className="btn-b btn-b-sm btn-b-primary ml-3"
             >
-              <User size={16} /> Login / Signup
+              <User size={14} /> Log in
             </button>
           )}
         </div>
 
-        {/* Mobile Menu Toggle */}
+        {/* Mobile toggle */}
         <div className="md:hidden">
-          <button onClick={toggleMenu}>
-            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          <button
+            onClick={toggleMenu}
+            className="border-[3px] border-ink bg-white p-1.5 shadow-brutal-sm active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
+          >
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Dropdown */}
+      {/* Mobile drawer */}
       {menuOpen && (
-        <div className="md:hidden bg-gray-800 border-t border-gray-700 px-6 pb-4 space-y-4">
-          {navLinks.map(({ path, label }) => (
+        <div className="md:hidden bg-white border-t-[3px] border-ink px-4 pb-4 pt-2 space-y-1">
+          {navLinks.map(({ path, label, soon }) => (
             <NavLink
               key={path}
               to={path}
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
-                `block text-sm font-medium ${
-                  isActive
-                    ? "text-indigo-400"
-                    : "text-gray-300 hover:text-indigo-300"
+                `block px-3 py-2.5 text-sm font-bold uppercase tracking-widest border-2 ${
+                  isActive ? "bg-ink text-white border-ink" : "border-transparent"
                 }`
               }
             >
               {label}
+              {soon && <sup className="ml-1 text-[8px]">soon</sup>}
             </NavLink>
           ))}
 
-          {user ? (
-            <>
+          <div className="pt-2 border-t-2 border-ink space-y-2">
+            {user ? (
+              <>
+                <button
+                  onClick={() => {
+                    navigate("/profile");
+                    setMenuOpen(false);
+                  }}
+                  className="btn-b w-full"
+                >
+                  <User size={16} /> Profile
+                </button>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    setMenuOpen(false);
+                    navigate("/login");
+                  }}
+                  className="btn-b btn-b-danger w-full"
+                >
+                  <LogOut size={16} /> Log out
+                </button>
+              </>
+            ) : (
               <button
                 onClick={() => {
-                  navigate("/profile");
-                  setMenuOpen(false);
-                }}
-                className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition"
-              >
-                <User size={16} /> Profile
-              </button>
-              <button
-                onClick={async () => {
-                  await logout();
-                  setMenuOpen(false);
                   navigate("/login");
+                  setMenuOpen(false);
                 }}
-                className="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition"
+                className="btn-b btn-b-primary w-full"
               >
-                <LogOut size={16} /> Logout
+                <User size={16} /> Log in / Sign up
               </button>
-            </>
-          ) : (
-            <button
-              onClick={() => {
-                navigate("/login");
-                setMenuOpen(false);
-              }}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition"
-            >
-              <User size={16} /> Login / Signup
-            </button>
-          )}
+            )}
+          </div>
         </div>
       )}
     </nav>

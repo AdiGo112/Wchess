@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { CheckCircle, XCircle, Scale } from "lucide-react";
 import api from "../api";
 
 export default function GameHistory() {
@@ -15,13 +14,14 @@ export default function GameHistory() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const getResultIcon = (game) => {
+  /* Strict mono: result reads through glyph + weight, not color.
+     ▲ win (bold, inverted chip) / ▼ loss / = draw */
+  const getResult = (game) => {
     const isWhite = game.whiteId === user.id;
     const result = game.result?.toLowerCase();
-    if (result === "draw") return <Scale className="text-yellow-400 w-5 h-5" />;
-    if ((result === "white" && isWhite) || (result === "black" && !isWhite))
-      return <CheckCircle className="text-green-400 w-5 h-5" />;
-    return <XCircle className="text-red-400 w-5 h-5" />;
+    if (result === "draw") return { glyph: "=", label: "Draw", win: false };
+    const won = (result === "white" && isWhite) || (result === "black" && !isWhite);
+    return won ? { glyph: "▲", label: "Win", win: true } : { glyph: "▼", label: "Loss", win: false };
   };
 
   const getRatingChange = (game) => {
@@ -29,44 +29,69 @@ export default function GameHistory() {
     return isWhite ? game.whiteRatingDiff : game.blackRatingDiff;
   };
 
-  const getOpponent = (game) => {
-    return game.whiteId === user.id ? game.blackUsername : game.whiteUsername;
-  };
+  const getOpponent = (game) =>
+    game.whiteId === user.id ? game.blackUsername : game.whiteUsername;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white px-4 py-10 flex flex-col items-center">
-      <div className="w-full max-w-4xl bg-gray-800/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-700">
-        <h1 className="text-2xl font-bold text-indigo-400 mb-6 text-center">♟️ Game History</h1>
+    <div className="max-w-4xl mx-auto py-4">
+      <h1 className="heading-b text-5xl text-center mb-2">THE RECEIPTS</h1>
+      <p className="text-center mb-10">
+        <span className="tag-b">every game. no takebacks.</span>
+      </p>
 
-        {loading ? (
-          <p className="text-center text-gray-400">Loading...</p>
-        ) : games.length === 0 ? (
-          <p className="text-center text-gray-400">No games played yet. Start your first match!</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {games.map((game) => {
-              const ratingChange = getRatingChange(game);
-              return (
-                <div key={game.id}
-                  className="flex justify-between items-center bg-gray-700 hover:bg-gray-600 transition rounded-lg p-4 border border-gray-600">
-                  <div>
-                    <p className="font-semibold text-lg">{getOpponent(game)}</p>
-                    <p className="text-sm text-gray-400">
-                      {new Date(game.createdAt).toLocaleDateString()} · {game.moves?.length ?? 0} moves · {game.variant?.toLowerCase()}
+      {loading ? (
+        <div className="text-center py-16">
+          <div className="loader-b mx-auto mb-4" />
+          <p className="text-xs font-bold uppercase tracking-widest">
+            Loading<span className="animate-blink">_</span>
+          </p>
+        </div>
+      ) : games.length === 0 ? (
+        <div className="card-b text-center py-12">
+          <p className="font-display text-2xl mb-2">NOTHING HERE YET</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
+            Play your first game and it goes on the record. Forever.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {games.map((game) => {
+            const ratingChange = getRatingChange(game);
+            const res = getResult(game);
+            return (
+              <div
+                key={game.id}
+                className="card-b-flat flex justify-between items-center gap-4 hover:shadow-brutal transition-shadow"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  {/* Result chip — win inverts */}
+                  <span
+                    className={`w-10 h-10 shrink-0 flex items-center justify-center border-[3px] border-ink font-mono font-bold ${
+                      res.win ? "bg-ink text-white" : "bg-white text-ink"
+                    }`}
+                    title={res.label}
+                  >
+                    {res.glyph}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-bold uppercase tracking-wider truncate">
+                      vs {getOpponent(game)}
                     </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {getResultIcon(game)}
-                    <p className={`text-sm font-bold ${ratingChange > 0 ? "text-green-400" : ratingChange < 0 ? "text-red-400" : "text-gray-400"}`}>
-                      {ratingChange > 0 ? "+" : ""}{ratingChange ?? 0}
+                    <p className="text-xs font-mono text-neutral-500">
+                      {new Date(game.createdAt).toLocaleDateString()} ·{" "}
+                      {game.moves?.length ?? 0} moves · {game.variant?.toLowerCase()}
                     </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <span className="font-mono font-bold whitespace-nowrap">
+                  {ratingChange > 0 ? "+" : ""}
+                  {ratingChange ?? 0}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -30,14 +30,20 @@ export default function VariantSelector({ selected, onSelect }) {
             key={presetKey(p)}
             type="button"
             onClick={() => onSelect(p)}
-            className={`flex flex-col items-center px-2 py-2 rounded-lg border transition ${
+            className={`flex flex-col items-center px-2 py-2 border-[3px] border-ink transition-all ${
               active
-                ? "bg-indigo-600 border-indigo-500"
-                : "border-gray-600 hover:border-indigo-400"
+                ? "bg-ink text-white shadow-brutal-sm"
+                : "bg-white hover:shadow-brutal-sm"
             }`}
           >
-            <span className="font-semibold">{p.label}</span>
-            <span className="text-xs text-gray-300">{p.name}</span>
+            <span className="font-mono font-bold">{p.label}</span>
+            <span
+              className={`text-[10px] font-bold uppercase tracking-widest ${
+                active ? "text-neutral-300" : "text-neutral-500"
+              }`}
+            >
+              {p.name}
+            </span>
           </button>
         );
       })}
