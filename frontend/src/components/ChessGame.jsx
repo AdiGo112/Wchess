@@ -111,6 +111,10 @@ export default function ChessGame({ roomId, mode, timeControl }) {
 
     socket.on("invalid_move", (data) => console.warn("Invalid move:", data.reason));
 
+    // Server-authoritative clock correction every 1s (ADR-0004); the local
+    // interval only interpolates between these.
+    socket.on("clock_sync", (data) => setTimers(data.timers));
+
     socket.on("rematch_offered", (data) => setRematchOfferedBy(data.byUserId));
 
     socket.on("rematch_ready", (data) => navigate(`/game/${data.roomId}`));
@@ -119,7 +123,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       [
         "game_start", "move_made", "game_over", "draw_offered", "draw_declined",
         "opponent_disconnected", "opponent_reconnected", "game_state", "invalid_move",
-        "rematch_offered", "rematch_ready",
+        "clock_sync", "rematch_offered", "rematch_ready",
       ].forEach((e) => socket.off(e));
       stopClock();
     };

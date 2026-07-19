@@ -21,9 +21,28 @@ export interface ActiveRoom {
   variant: string;
   /** Stockfish difficulty (1-5) for computer games; undefined for human games. */
   difficulty?: number;
+  /** Optimistic-concurrency version, bumped by every casSaveRoom. */
+  version: number;
 }
 
 const ROOM_TTL = 86400;
+/** ADR-0004: a move arriving within this margin of flag-fall is still accepted. */
+export const CLOCK_GRACE_MS = 500;
+/** ZSET of roomId → epoch-ms deadline for the side to move (ADR-0004 addendum). */
+const DEADLINES_KEY = 'clock:deadlines';
+
+/**
+ * Compare-and-set on the room JSON: writes only if the stored version still
+ * matches what the caller read. Missing key counts as a conflict (room deleted).
+ */
+const CAS_SCRIPT = `
+local cur = redis.call('GET', KEYS[1])
+if not cur then return 0 end
+local ok, obj = pcall(cjson.decode, cur)
+if not ok or tonumber(obj.version) ~= tonumber(ARGV[1]) then return 0 end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+return 1
+`;
 
 @Injectable()
 export class GamesService {
@@ -43,8 +62,53 @@ export class GamesService {
     await this.redis.setJson(this.roomKey(room.id), room, ROOM_TTL);
   }
 
+  /**
+   * CAS write: succeeds only if nobody else wrote the room since the caller's
+   * getRoom. On success the room's version is bumped; on conflict the room is
+   * left untouched and the caller must refetch and redo its read-modify-write.
+   */
+  async casSaveRoom(room: ActiveRoom): Promise<boolean> {
+    const expected = room.version;
+    room.version = expected + 1;
+    const ok = await this.redis.eval(
+      CAS_SCRIPT,
+      [this.roomKey(room.id)],
+      [expected, JSON.stringify(room), ROOM_TTL],
+    );
+    if (ok !== 1) {
+      room.version = expected;
+      return false;
+    }
+    return true;
+  }
+
   async deleteRoom(roomId: string): Promise<void> {
     await this.redis.del(this.roomKey(roomId));
+    await this.clearDeadline(roomId);
+  }
+
+  /**
+   * Record when the side to move will flag: lastMoveAt + their remaining budget
+   * + grace. The sweeper acts only after this moment; every move re-arms it.
+   */
+  async setDeadline(room: ActiveRoom): Promise<void> {
+    const side = room.fen.split(' ')[1] === 'w' ? 'white' : 'black';
+    const deadline = room.lastMoveAt + room.timers[side] + CLOCK_GRACE_MS;
+    await this.redis.zadd(DEADLINES_KEY, deadline, room.id);
+  }
+
+  async clearDeadline(roomId: string): Promise<void> {
+    await this.redis.zrem(DEADLINES_KEY, roomId);
+  }
+
+  /** Room ids whose deadline has passed (side to move has flagged + grace). */
+  async expiredDeadlines(now: number): Promise<string[]> {
+    return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', now);
+  }
+
+  /** All room ids currently under clock watch (i.e. active games). */
+  async watchedRooms(): Promise<string[]> {
+    return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', '+inf');
   }
 
   async createRoom(
@@ -75,6 +139,7 @@ export class GamesService {
       rematchRequestedBy: null,
       variant,
       difficulty,
+      version: 0,
     };
 
     await this.setRoom(room);
