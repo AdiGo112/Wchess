@@ -140,7 +140,33 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
-`feature/stockfish` — computer games play end to end against real Stockfish. Uncommitted.
+`feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; ready to merge.
+
+- **#3 `prisma.$transaction`**: game row + both rating upserts commit atomically in
+  `saveCompletedGame` (leaderboard ZADDs stay outside — Redis can't join a PG tx).
+- **#4 ThrottlerGuard as APP_GUARD**: verified with a 20-parallel burst → exactly
+  10 pass / rest 429 per the `short` (10/s) window. Global guards don't bind to WS
+  gateways, so socket traffic is unaffected.
+- **#5 `VITE_SERVER_URL`**: ONE origin-only env var replaces the hardcoded
+  `localhost:3000` in BOTH `SocketContext.jsx` and `api.js` (the sprint item named only
+  the socket; api.js had the identical deploy blocker). `frontend/.env.example` added;
+  `environment.md` updated (supersedes the planned VITE_API_URL/VITE_WS_URL pair).
+
+- **#1 Server clocks (ADR-0004)**: `clock:deadlines` Redis ZSET; deadline = lastMoveAt +
+  remaining + 500ms grace, re-armed on every move; one 1s sweeper in `GameGateway`
+  flags expired games (persisted + rated — the hung-game bug is closed) and pushes
+  `clock_sync` to every active room; move path judges flag-fall on raw time BEFORE
+  increment (fixed latent bug) and honors the grace window; `claim_timeout` re-verifies
+  live remaining. Frontend: `clock_sync` listener corrects local interpolation.
+- **#2 Room CAS**: `ActiveRoom.version` + Lua compare-and-set (`casSaveRoom`); all
+  gateway mutations CAS + rerun-on-conflict; terminal moves claim `ended` in the same
+  write as the move; `claimEnd` makes racing enders (sweeper / claim / resign /
+  disconnect) settle exactly once. Bonus: player-guards added to resign / draw /
+  claim_timeout / rematch (any authed socket could previously end any game).
+- **Verified 8/8 live** (`frontend/scripts/verify-clocks.mjs`): hung-game auto-flag +
+  rating, 1s monotonic clock_sync, in-grace late move accepted (clock clamps to 0),
+  double-resign settles once. Beware: first run hit a stale 3:57am server on :3000
+  (EADDRINUSE in watch logs) — kill port 3000 before trusting a verify run.
 
 ## Blocked
 _Nothing blocked._
@@ -215,11 +241,11 @@ ADR-0004 addendum.
 
 | # | Item | Why it can't wait |
 |---|---|---|
-| 1 | Server clocks (ADR-0004) | games hang forever; never saved, never rated |
-| 2 | Room CAS (`version` + Lua) | lock-free read-modify-write on the move path — real on **one** instance |
-| 3 | `prisma.$transaction` in `saveCompletedGame` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
-| 4 | Register `ThrottlerGuard` as `APP_GUARD` | configured in `app.module.ts`, never registered — nothing is throttled |
-| 5 | Socket URL → env var | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
+| 1 | ~~Server clocks (ADR-0004)~~ ✅ `feature/server-clocks` | games hang forever; never saved, never rated |
+| 2 | ~~Room CAS (`version` + Lua)~~ ✅ `feature/server-clocks` | lock-free read-modify-write on the move path — real on **one** instance |
+| 3 | ~~`prisma.$transaction` in `saveCompletedGame`~~ ✅ `feature/server-clocks` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
+| 4 | ~~Register `ThrottlerGuard` as `APP_GUARD`~~ ✅ `feature/server-clocks` | configured in `app.module.ts`, never registered — nothing is throttled |
+| 5 | ~~Socket URL → env var~~ ✅ `feature/server-clocks` (`VITE_SERVER_URL`, covers api.js too) | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
 
 Recurring pattern worth a PR-review checklist item: **infra gets configured but not
 wired.** The Redis adapter, the Throttler guard, and Jest (0 `.spec.ts` files) are all

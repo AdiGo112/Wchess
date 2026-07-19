@@ -51,3 +51,27 @@ The original "1000 intervals is manageable" note in Consequences is true but irr
 the sorted set is less code, not just less overhead, and it removes an entire class of
 "timer lost on restart" bug. The 500ms grace margin and `clock_update` interpolation are
 retained as specified.
+
+### Implemented (2026-07-19, `feature/server-clocks`)
+
+Built exactly as the variance above describes, plus optimistic concurrency on the room:
+
+- `clock:deadlines` ZSET (`games.service.ts`): score = `lastMoveAt + timers[sideToMove]
+  + 500ms grace`, re-armed by every move / game start, cleared on game end.
+- One 1s sweeper (`game.gateway.ts onModuleInit`) per process: past-deadline rooms are
+  re-verified from fresh state and CAS-claimed into `ended` → `TIMEOUT`, persisted and
+  rated like any other result; all other watched rooms get a 1s `clock_sync` push
+  (the event name already in `websocket-events.md`; the spec's `clock_update` name was
+  never published, so the existing name was kept).
+- Grace on the move path: flag-fall is judged on raw remaining time BEFORE increment
+  (also fixes the old bug where adding increment first made move-path timeout
+  undetectable); a move within 500ms of zero is accepted with the clock clamped to 0.
+- Room CAS: `ActiveRoom.version` + a Lua compare-and-set (`casSaveRoom`). Every gateway
+  mutation goes through it; terminal moves claim `status='ended'` in the same write as
+  the move, and `claimEnd` guarantees exactly one of any racing enders (sweeper,
+  `claim_timeout`, resign, disconnect timer) settles the game.
+
+Verified 8/8 against the live stack (`frontend/scripts/verify-clocks.mjs`): hung game
+flags in ~TC+0.5s with no client claim and is rated; `clock_sync` at 1s cadence,
+monotonic; in-grace late move accepted with clock clamped to 0; double-resign race
+settles exactly once.

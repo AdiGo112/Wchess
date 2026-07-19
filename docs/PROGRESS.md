@@ -50,6 +50,7 @@
 | 1 | Backend gateway: move validation, clocks, terminal states | ✅ | `main` | join_room, move, resign, all terminal states work |
 | 2 | Backend draw + disconnect: offer/accept/decline, auto-resign | ✅ | `feature/game-engine` | Auto-resign timer, reconnect handling, draw accept validation |
 | 3 | Frontend board: color lock, rating modal, rematch | ✅ | `feature/game-engine` | isDraggablePiece color lock; draw offerer/receiver split UI; emoji+You rating modal; rematch flow |
+| 4 | Server clocks (ADR-0004) + room CAS | ✅ | `feature/server-clocks` | Redis ZSET deadline sweeper (1s), 500ms grace, `clock_sync` push, `ActiveRoom.version` + Lua CAS on every mutation, player-guard on all game actions. 8/8 live e2e (`frontend/scripts/verify-clocks.mjs`) |
 
 ---
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { AuthModule } from './auth/auth.module';
@@ -26,6 +27,11 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
     GamesModule,
     MatchmakingModule,
     LeaderboardModule,
+  ],
+  providers: [
+    // Actually enforce the ThrottlerModule config above on every HTTP route.
+    // (Global guards don't bind to WS gateways, so sockets are unaffected.)
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

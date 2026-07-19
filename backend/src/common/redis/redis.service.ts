@@ -113,4 +113,20 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async lrem(key: string, count: number, value: string): Promise<number> {
     return this.client.lrem(key, count, value);
   }
+
+  async zrem(key: string, member: string): Promise<number> {
+    return this.client.zrem(key, member);
+  }
+
+  async zrangebyscore(key: string, min: number | string, max: number | string): Promise<string[]> {
+    return this.client.zrangebyscore(key, min, max);
+  }
+
+  async zrangeWithScores(key: string, start: number, stop: number): Promise<string[]> {
+    return this.client.zrange(key, start, stop, 'WITHSCORES');
+  }
+
+  async eval(script: string, keys: string[], args: (string | number)[]): Promise<unknown> {
+    return this.client.eval(script, keys.length, ...keys, ...args);
+  }
 }
