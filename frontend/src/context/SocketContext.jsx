@@ -12,7 +12,7 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!getToken() || !user) return;
 
-    const socket = io("http://localhost:3000", {
+    const socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:3000", {
       auth: (cb) => cb({ token: `Bearer ${getToken()}` }),
       transports: ["websocket"],
       reconnectionDelay: 1000,

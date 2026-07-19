@@ -140,7 +140,17 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
-`feature/server-clocks` — sprint items 1 + 2 DONE, verified 8/8, ready to merge.
+`feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; ready to merge.
+
+- **#3 `prisma.$transaction`**: game row + both rating upserts commit atomically in
+  `saveCompletedGame` (leaderboard ZADDs stay outside — Redis can't join a PG tx).
+- **#4 ThrottlerGuard as APP_GUARD**: verified with a 20-parallel burst → exactly
+  10 pass / rest 429 per the `short` (10/s) window. Global guards don't bind to WS
+  gateways, so socket traffic is unaffected.
+- **#5 `VITE_SERVER_URL`**: ONE origin-only env var replaces the hardcoded
+  `localhost:3000` in BOTH `SocketContext.jsx` and `api.js` (the sprint item named only
+  the socket; api.js had the identical deploy blocker). `frontend/.env.example` added;
+  `environment.md` updated (supersedes the planned VITE_API_URL/VITE_WS_URL pair).
 
 - **#1 Server clocks (ADR-0004)**: `clock:deadlines` Redis ZSET; deadline = lastMoveAt +
   remaining + 500ms grace, re-armed on every move; one 1s sweeper in `GameGateway`
@@ -233,9 +243,9 @@ ADR-0004 addendum.
 |---|---|---|
 | 1 | ~~Server clocks (ADR-0004)~~ ✅ `feature/server-clocks` | games hang forever; never saved, never rated |
 | 2 | ~~Room CAS (`version` + Lua)~~ ✅ `feature/server-clocks` | lock-free read-modify-write on the move path — real on **one** instance |
-| 3 | `prisma.$transaction` in `saveCompletedGame` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
-| 4 | Register `ThrottlerGuard` as `APP_GUARD` | configured in `app.module.ts`, never registered — nothing is throttled |
-| 5 | Socket URL → env var | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
+| 3 | ~~`prisma.$transaction` in `saveCompletedGame`~~ ✅ `feature/server-clocks` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
+| 4 | ~~Register `ThrottlerGuard` as `APP_GUARD`~~ ✅ `feature/server-clocks` | configured in `app.module.ts`, never registered — nothing is throttled |
+| 5 | ~~Socket URL → env var~~ ✅ `feature/server-clocks` (`VITE_SERVER_URL`, covers api.js too) | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
 
 Recurring pattern worth a PR-review checklist item: **infra gets configured but not
 wired.** The Redis adapter, the Throttler guard, and Jest (0 `.spec.ts` files) are all

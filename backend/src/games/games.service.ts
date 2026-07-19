@@ -199,7 +199,7 @@ export class GamesService {
 
     const duration = Math.round((Date.now() - room.startedAt) / 1000);
 
-    const game = await this.prisma.game.create({
+    const createGame = this.prisma.game.create({
       data: {
         whiteId: room.whitePlayer.id,
         blackId: room.blackPlayer.id,
@@ -220,37 +220,44 @@ export class GamesService {
       },
     });
 
+    // Game row + both rating writes commit atomically: a crash mid-sequence
+    // can no longer record a game with one side's rating silently unchanged.
+    let game;
     if (result !== 'ABORTED') {
-      await this.prisma.userRating.upsert({
-        where: { userId_variant: { userId: room.whitePlayer.id, variant } },
-        update: { rating: newWhite.rating, ratingDeviation: newWhite.rd, volatility: newWhite.sigma,
-          wins: { increment: result === 'WHITE' ? 1 : 0 },
-          losses: { increment: result === 'BLACK' ? 1 : 0 },
-          draws: { increment: result === 'DRAW' ? 1 : 0 },
-        },
-        create: { userId: room.whitePlayer.id, variant, rating: newWhite.rating,
-          ratingDeviation: newWhite.rd, volatility: newWhite.sigma,
-          wins: result === 'WHITE' ? 1 : 0, losses: result === 'BLACK' ? 1 : 0,
-          draws: result === 'DRAW' ? 1 : 0,
-        },
-      });
-
-      await this.prisma.userRating.upsert({
-        where: { userId_variant: { userId: room.blackPlayer.id, variant } },
-        update: { rating: newBlack.rating, ratingDeviation: newBlack.rd, volatility: newBlack.sigma,
-          wins: { increment: result === 'BLACK' ? 1 : 0 },
-          losses: { increment: result === 'WHITE' ? 1 : 0 },
-          draws: { increment: result === 'DRAW' ? 1 : 0 },
-        },
-        create: { userId: room.blackPlayer.id, variant, rating: newBlack.rating,
-          ratingDeviation: newBlack.rd, volatility: newBlack.sigma,
-          wins: result === 'BLACK' ? 1 : 0, losses: result === 'WHITE' ? 1 : 0,
-          draws: result === 'DRAW' ? 1 : 0,
-        },
-      });
+      [game] = await this.prisma.$transaction([
+        createGame,
+        this.prisma.userRating.upsert({
+          where: { userId_variant: { userId: room.whitePlayer.id, variant } },
+          update: { rating: newWhite.rating, ratingDeviation: newWhite.rd, volatility: newWhite.sigma,
+            wins: { increment: result === 'WHITE' ? 1 : 0 },
+            losses: { increment: result === 'BLACK' ? 1 : 0 },
+            draws: { increment: result === 'DRAW' ? 1 : 0 },
+          },
+          create: { userId: room.whitePlayer.id, variant, rating: newWhite.rating,
+            ratingDeviation: newWhite.rd, volatility: newWhite.sigma,
+            wins: result === 'WHITE' ? 1 : 0, losses: result === 'BLACK' ? 1 : 0,
+            draws: result === 'DRAW' ? 1 : 0,
+          },
+        }),
+        this.prisma.userRating.upsert({
+          where: { userId_variant: { userId: room.blackPlayer.id, variant } },
+          update: { rating: newBlack.rating, ratingDeviation: newBlack.rd, volatility: newBlack.sigma,
+            wins: { increment: result === 'BLACK' ? 1 : 0 },
+            losses: { increment: result === 'WHITE' ? 1 : 0 },
+            draws: { increment: result === 'DRAW' ? 1 : 0 },
+          },
+          create: { userId: room.blackPlayer.id, variant, rating: newBlack.rating,
+            ratingDeviation: newBlack.rd, volatility: newBlack.sigma,
+            wins: result === 'BLACK' ? 1 : 0, losses: result === 'WHITE' ? 1 : 0,
+            draws: result === 'DRAW' ? 1 : 0,
+          },
+        }),
+      ]);
 
       await this.leaderboard.updateScore(room.whitePlayer.id, variant.toLowerCase(), newWhite.rating);
       await this.leaderboard.updateScore(room.blackPlayer.id, variant.toLowerCase(), newBlack.rating);
+    } else {
+      game = await createGame;
     }
 
     await this.deleteRoom(room.id);
