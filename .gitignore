@@ -13,6 +13,6 @@ dist/
 # OS / IDE files
 .DS_Store
 *.log
-docs/
+# docs/
 .claude/
 temp_*.md
