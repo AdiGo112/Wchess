@@ -13,13 +13,35 @@ import Signup from "./pages/Signup";
 import GameHistory from "./pages/GameHistory";
 import PlayerList from "./components/PlayerList";
 import Leaderboard from "./pages/Leaderboard";
+import Puzzles from "./pages/Puzzles";
+import Tournaments from "./pages/Tournaments";
 
 export default function App() {
   return (
-    <div className="min-h-screen">
-      <Toaster position="top-right" />
+    <div className="min-h-screen flex flex-col">
+      {/* Brutal toasts: square, bordered, uppercase. No colored success/error
+          variants — the message text carries the meaning (strict mono). */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "#ffffff",
+            color: "#0a0a0a",
+            border: "3px solid #0a0a0a",
+            borderRadius: "0",
+            boxShadow: "5px 5px 0 0 #0a0a0a",
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontWeight: "700",
+            textTransform: "uppercase",
+            fontSize: "12px",
+            letterSpacing: "0.05em",
+          },
+          success: { iconTheme: { primary: "#0a0a0a", secondary: "#ffffff" } },
+          error: { iconTheme: { primary: "#0a0a0a", secondary: "#ffffff" } },
+        }}
+      />
       <Navbar />
-      <main className="container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 py-8">
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<Home />} />
@@ -27,6 +49,10 @@ export default function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/players" element={<PlayerList />} />
+
+          {/* Coming-soon placeholders for features deferred by ADR-0032 */}
+          <Route path="/puzzles" element={<Puzzles />} />
+          <Route path="/tournaments" element={<Tournaments />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>

@@ -17,39 +17,71 @@ export default function Leaderboard() {
   const variants = ["bullet", "blitz", "rapid", "classical"];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <h1 className="text-3xl font-bold text-center mb-4">🏆 Leaderboard</h1>
+    <div className="max-w-2xl mx-auto py-4">
+      <h1 className="heading-b text-5xl text-center mb-2">THE FOOD CHAIN</h1>
+      <p className="text-center mb-8">
+        <span className="tag-b">top 100. earn your spot.</span>
+      </p>
 
-      <div className="flex justify-center gap-2 mb-6">
-        {variants.map((v) => (
-          <button key={v} onClick={() => setVariant(v)}
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${variant === v ? "bg-indigo-600" : "bg-gray-700 hover:bg-gray-600"}`}>
-            {v.charAt(0).toUpperCase() + v.slice(1)}
-          </button>
-        ))}
+      {/* Variant tabs — segmented, inverted active */}
+      <div className="flex justify-center mb-10">
+        <div className="inline-flex border-[3px] border-ink divide-x-[3px] divide-ink shadow-brutal">
+          {variants.map((v) => (
+            <button
+              key={v}
+              onClick={() => setVariant(v)}
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                variant === v ? "bg-ink text-white" : "bg-white hover:bg-neutral-200"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
-        <p className="text-center text-gray-400">Loading...</p>
+        <div className="text-center py-16">
+          <div className="loader-b mx-auto mb-4" />
+          <p className="text-xs font-bold uppercase tracking-widest">
+            Loading<span className="animate-blink">_</span>
+          </p>
+        </div>
       ) : players.length === 0 ? (
-        <p className="text-center text-gray-400">No players on the leaderboard yet.</p>
+        <div className="card-b text-center py-12">
+          <p className="font-display text-2xl mb-2">EMPTY THRONE</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">
+            Nobody's rated in {variant} yet. Free real estate.
+          </p>
+        </div>
       ) : (
-        <div className="max-w-2xl mx-auto space-y-2">
-          {players.map((p) => (
-            <div key={p.userId}
-              className="flex items-center justify-between bg-gray-800 rounded-lg px-4 py-3 border border-gray-700">
-              <div className="flex items-center gap-4">
-                <span className={`font-bold text-lg w-8 text-center ${p.rank <= 3 ? "text-yellow-400" : "text-gray-400"}`}>
-                  #{p.rank}
-                </span>
-                <div>
-                  <p className="font-semibold">{p.username}</p>
-                  {p.name && <p className="text-xs text-gray-400">{p.name}</p>}
+        <div className="space-y-3">
+          {players.map((p) => {
+            const podium = p.rank <= 3;
+            return (
+              <div
+                key={p.userId}
+                className={`flex items-center justify-between px-4 py-3 border-[3px] border-ink ${
+                  podium ? "bg-ink text-white shadow-brutal" : "bg-white card-b-flat !p-0 !px-4 !py-3"
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="font-display text-xl w-10 text-center">
+                    {p.rank === 1 ? "♛" : `#${p.rank}`}
+                  </span>
+                  <div>
+                    <p className="font-bold uppercase tracking-wider">{p.username}</p>
+                    {p.name && (
+                      <p className={`text-xs font-mono ${podium ? "text-neutral-300" : "text-neutral-500"}`}>
+                        {p.name}
+                      </p>
+                    )}
+                  </div>
                 </div>
+                <span className="font-mono font-bold text-xl">{p.rating}</span>
               </div>
-              <span className="text-indigo-400 font-bold text-lg">{p.rating}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

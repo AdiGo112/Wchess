@@ -41,21 +41,23 @@ export default function ChallengeAccept() {
   }, [token, navigate]);
 
   return (
-    <div className="text-white text-center py-20">
+    <div className="text-center py-24">
       {error ? (
-        <>
-          <p className="text-lg text-red-400 mb-4">{error}</p>
-          <button
-            onClick={() => navigate("/lobby")}
-            className="bg-indigo-600 hover:bg-indigo-700 px-5 py-2 rounded-lg font-semibold"
-          >
-            Back to Lobby
+        <div className="card-b inline-block px-10 py-8">
+          <p className="font-display text-3xl mb-2">DEAD LINK</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-neutral-500 mb-6">
+            {error}
+          </p>
+          <button onClick={() => navigate("/lobby")} className="btn-b btn-b-primary">
+            Back to lobby
           </button>
-        </>
+        </div>
       ) : (
         <>
-          <div className="animate-spin w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-300">Joining game…</p>
+          <div className="loader-b mx-auto mb-4" />
+          <p className="text-xs font-bold uppercase tracking-widest">
+            Joining game<span className="animate-blink">_</span>
+          </p>
         </>
       )}
     </div>

@@ -2,21 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom minimal styling */
-body {
-  @apply bg-bg text-gray-100 antialiased;
+/* ============================================================
+   WChess — neo-brutalist strict monochrome.
+   Every reusable visual pattern lives here as a component class
+   so pages stay terse. See tailwind.config.js for the rules.
+   ============================================================ */
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-body antialiased;
+  }
+
+  /* Inverted selection — the whole site flips black↔white when you select */
+  ::selection {
+    @apply bg-ink text-white;
+  }
 }
 
-.glow-card {
-  background: linear-gradient(145deg, rgba(14,165,164,0.06), rgba(14,165,164,0.02));
-  box-shadow: 0 6px 24px rgba(14,165,164,0.06);
-  border: 1px solid rgba(14,165,164,0.06);
+@layer components {
+  /* ---- Buttons ------------------------------------------------
+     Press mechanic: rest = offset shadow, hover = lift + bigger
+     shadow, active = shove into the page + no shadow.           */
+  .btn-b {
+    @apply inline-flex items-center justify-center gap-2 border-[3px] border-ink
+           bg-white px-5 py-3 font-bold uppercase tracking-wider text-sm
+           shadow-brutal transition-all duration-100
+           hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg
+           active:translate-x-1 active:translate-y-1 active:shadow-none
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-b-primary {
+    @apply btn-b bg-ink text-white;
+  }
+  /* Destructive = white face + heavy strike prefix, still mono */
+  .btn-b-danger {
+    @apply btn-b bg-white text-ink line-through decoration-[3px];
+  }
+  .btn-b-sm {
+    @apply px-3 py-1.5 text-xs shadow-brutal-sm hover:shadow-brutal;
+  }
+
+  /* ---- Surfaces ---- */
+  .card-b {
+    @apply bg-white border-[3px] border-ink shadow-brutal p-6;
+  }
+  .card-b-flat {
+    @apply bg-white border-[3px] border-ink p-4;
+  }
+  /* Inverted panel (black card, white hard shadow) */
+  .card-b-inverse {
+    @apply bg-ink text-white border-[3px] border-ink shadow-brutal-white p-6;
+  }
+
+  /* ---- Forms ---- */
+  .input-b {
+    @apply w-full border-[3px] border-ink bg-white px-4 py-3 font-medium
+           placeholder:uppercase placeholder:text-neutral-400 placeholder:text-xs
+           placeholder:tracking-widest focus:outline-none focus:shadow-brutal
+           transition-shadow;
+  }
+  .label-b {
+    @apply block text-xs font-bold uppercase tracking-widest mb-1;
+  }
+  .error-b {
+    @apply mt-1 inline-block bg-ink text-white text-xs font-bold px-2 py-0.5 uppercase;
+  }
+
+  /* ---- Bits ---- */
+  .tag-b {
+    @apply inline-block border-2 border-ink px-2 py-0.5 text-[11px] font-bold
+           uppercase tracking-widest;
+  }
+  .tag-b-inverse {
+    @apply tag-b bg-ink text-white;
+  }
+  .heading-b {
+    @apply font-display uppercase leading-none;
+  }
+
+  /* Marquee strip — the ticker tape band */
+  .marquee-b {
+    @apply overflow-hidden whitespace-nowrap border-y-[3px] border-ink bg-ink
+           text-white select-none;
+  }
+  .marquee-b > div {
+    @apply inline-block animate-marquee font-display uppercase text-sm py-2;
+  }
+
+  /* Square loader — spinning ink square, no circles in a brutalist house */
+  .loader-b {
+    @apply w-10 h-10 bg-ink animate-spin;
+    animation-duration: 1.2s;
+  }
 }
 
-.board-wrapper {
-  /* ensure board fits and glows */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 1rem;
+/* Used via inline style on the checked king's square (ChessGame.jsx), so it
+   must live outside Tailwind's tree-shaken keyframes. */
+@keyframes ring-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 4px #0a0a0a; }
+  50% { box-shadow: inset 0 0 0 10px #0a0a0a; }
 }

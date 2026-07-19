@@ -48,88 +48,93 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-      <form onSubmit={handleSubmit} className="bg-gray-800 p-8 rounded-2xl shadow-lg w-80">
-        <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
+    <div className="flex flex-col items-center justify-center min-h-[80vh] py-8">
+      <h1 className="heading-b text-5xl mb-2">NEW PLAYER</h1>
+      <p className="tag-b mb-8">pick a name. own it.</p>
 
-        <div className="mb-3">
+      <form onSubmit={handleSubmit} className="card-b w-full max-w-sm space-y-3">
+        <div>
+          <label className="label-b" htmlFor="su-username">Username</label>
           <input
+            id="su-username"
             name="username"
             value={form.username}
             onChange={handleChange}
-            placeholder="Username (3-20 chars)"
+            placeholder="3-20 chars"
             required
             minLength={3}
             maxLength={20}
-            className="w-full p-2 rounded bg-gray-700"
+            className="input-b"
           />
-          {fieldErrors.username && (
-            <p className="text-red-400 text-xs mt-1">{fieldErrors.username}</p>
-          )}
+          {fieldErrors.username && <p className="error-b">{fieldErrors.username}</p>}
         </div>
 
-        <div className="mb-3">
+        <div>
+          <label className="label-b" htmlFor="su-email">Email</label>
           <input
+            id="su-email"
             name="email"
             type="email"
             value={form.email}
             onChange={handleChange}
-            placeholder="Email"
+            placeholder="you@somewhere"
             required
-            className="w-full p-2 rounded bg-gray-700"
+            className="input-b"
           />
-          {fieldErrors.email && (
-            <p className="text-red-400 text-xs mt-1">{fieldErrors.email}</p>
-          )}
+          {fieldErrors.email && <p className="error-b">{fieldErrors.email}</p>}
         </div>
 
-        <input
-          name="name"
-          value={form.name}
-          onChange={handleChange}
-          placeholder="Display name"
-          required
-          className="w-full mb-3 p-2 rounded bg-gray-700"
-        />
-
-        <input
-          name="password"
-          type="password"
-          value={form.password}
-          onChange={handleChange}
-          placeholder="Password (min 8 chars)"
-          required
-          minLength={8}
-          className="w-full mb-3 p-2 rounded bg-gray-700"
-        />
-
-        <div className="mb-4">
+        <div>
+          <label className="label-b" htmlFor="su-name">Display name</label>
           <input
+            id="su-name"
+            name="name"
+            value={form.name}
+            onChange={handleChange}
+            placeholder="what we call you"
+            required
+            className="input-b"
+          />
+        </div>
+
+        <div>
+          <label className="label-b" htmlFor="su-password">Password</label>
+          <input
+            id="su-password"
+            name="password"
+            type="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="min 8 chars"
+            required
+            minLength={8}
+            className="input-b"
+          />
+        </div>
+
+        <div>
+          <label className="label-b" htmlFor="su-confirm">Confirm password</label>
+          <input
+            id="su-confirm"
             name="confirmPassword"
             type="password"
             value={form.confirmPassword}
             onChange={handleChange}
-            placeholder="Confirm password"
+            placeholder="again"
             required
-            className="w-full p-2 rounded bg-gray-700"
+            className="input-b"
           />
-          {fieldErrors.confirmPassword && (
-            <p className="text-red-400 text-xs mt-1">{fieldErrors.confirmPassword}</p>
-          )}
+          {fieldErrors.confirmPassword && <p className="error-b">{fieldErrors.confirmPassword}</p>}
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 p-2 rounded font-semibold"
-        >
-          {loading ? "Creating account..." : "Create Account"}
+        <button type="submit" disabled={loading} className="btn-b btn-b-primary w-full !mt-5">
+          {loading ? "Creating…" : "Create account →"}
         </button>
 
-        <p className="text-sm text-center mt-4">
-          Already have an account?{" "}
-          <Link to="/login" className="text-blue-400 underline">
-            Login
+        <p className="text-xs font-medium text-neutral-500 text-center uppercase tracking-wider">
+          Already in?{" "}
+          <Link to="/login" className="text-ink font-bold underline decoration-2 underline-offset-2">
+            Log in
           </Link>
         </p>
       </form>

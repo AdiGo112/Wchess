@@ -9,17 +9,27 @@ export default function PlayerList({ onSelect }) {
   }, []);
 
   return (
-    <div className="flex flex-col gap-2 bg-gray-800 p-4 rounded-lg shadow-lg">
-      <h2 className="text-xl font-semibold mb-2">Select Player</h2>
-      {players.map(p => (
-        <button
-          key={p._id}
-          onClick={() => onSelect(p)}
-          className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
-        >
-          {p.username} ({p.rating})
-        </button>
-      ))}
+    <div className="card-b max-w-md mx-auto">
+      <h2 className="heading-b text-xl mb-4 border-b-[3px] border-ink pb-3">
+        Select player
+      </h2>
+      <div className="flex flex-col gap-2">
+        {players.map(p => (
+          <button
+            key={p._id}
+            onClick={() => onSelect(p)}
+            className="btn-b btn-b-sm justify-between"
+          >
+            <span>{p.username}</span>
+            <span className="font-mono">({p.rating})</span>
+          </button>
+        ))}
+        {players.length === 0 && (
+          <p className="text-xs font-bold uppercase tracking-widest text-neutral-400 text-center py-4">
+            Nobody home
+          </p>
+        )}
+      </div>
     </div>
   );
 }
