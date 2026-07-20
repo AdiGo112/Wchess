@@ -1,20 +1,22 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
+import type { LeaderboardRow } from "../types";
+
+const VARIANTS = ["bullet", "blitz", "rapid", "classical"] as const;
+type Variant = (typeof VARIANTS)[number];
 
 export default function Leaderboard() {
-  const [players, setPlayers] = useState([]);
-  const [variant, setVariant] = useState("blitz");
+  const [players, setPlayers] = useState<LeaderboardRow[]>([]);
+  const [variant, setVariant] = useState<Variant>("blitz");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/leaderboard?variant=${variant}&limit=100`)
+    api.get<LeaderboardRow[]>(`/leaderboard?variant=${variant}&limit=100`)
       .then((res) => setPlayers(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [variant]);
-
-  const variants = ["bullet", "blitz", "rapid", "classical"];
 
   return (
     <div className="max-w-2xl mx-auto py-4">
@@ -26,7 +28,7 @@ export default function Leaderboard() {
       {/* Variant tabs — segmented, inverted active */}
       <div className="flex justify-center mb-10">
         <div className="inline-flex border-[3px] border-ink divide-x-[3px] divide-ink shadow-brutal">
-          {variants.map((v) => (
+          {VARIANTS.map((v) => (
             <button
               key={v}
               onClick={() => setVariant(v)}

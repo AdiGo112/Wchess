@@ -1,7 +1,13 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Menu, X, LogOut, User, ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+
+interface NavItem {
+  path: string;
+  label: string;
+  soon?: boolean;
+}
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -12,7 +18,7 @@ export default function Navbar() {
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const toggleProfile = () => setProfileOpen(!profileOpen);
 
-  const navLinks = [
+  const navLinks: NavItem[] = [
     { path: "/", label: "Home" },
     { path: "/lobby", label: "Play" },
     { path: "/leaderboard", label: "Ranks" },
@@ -21,7 +27,7 @@ export default function Navbar() {
     { path: "/tournaments", label: "Arena", soon: true },
   ];
 
-  const linkClass = ({ isActive }) =>
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
     `text-xs font-bold uppercase tracking-widest px-3 py-2 border-2 transition-all ${
       isActive
         ? "bg-ink text-white border-ink"
@@ -119,7 +125,7 @@ export default function Navbar() {
               key={path}
               to={path}
               onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
+              className={({ isActive }: { isActive: boolean }) =>
                 `block px-3 py-2.5 text-sm font-bold uppercase tracking-widest border-2 ${
                   isActive ? "bg-ink text-white border-ink" : "border-transparent"
                 }`

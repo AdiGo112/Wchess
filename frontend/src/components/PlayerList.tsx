@@ -1,11 +1,21 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 
-export default function PlayerList({ onSelect }) {
-  const [players, setPlayers] = useState([]);
+interface PlayerRow {
+  _id: string;
+  username: string;
+  rating: number;
+}
+
+interface PlayerListProps {
+  onSelect?: (player: PlayerRow) => void;
+}
+
+export default function PlayerList({ onSelect }: PlayerListProps) {
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
 
   useEffect(() => {
-    api.get("/players").then(res => setPlayers(res.data)).catch(console.error);
+    api.get<PlayerRow[]>("/players").then((res) => setPlayers(res.data)).catch(console.error);
   }, []);
 
   return (
@@ -14,10 +24,10 @@ export default function PlayerList({ onSelect }) {
         Select player
       </h2>
       <div className="flex flex-col gap-2">
-        {players.map(p => (
+        {players.map((p) => (
           <button
             key={p._id}
-            onClick={() => onSelect(p)}
+            onClick={() => onSelect?.(p)}
             className="btn-b btn-b-sm justify-between"
           >
             <span>{p.username}</span>

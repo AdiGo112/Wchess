@@ -1,6 +1,9 @@
-import React from "react";
+interface PlayerCardProps {
+  player: { username: string; rating?: number; gamesPlayed?: number };
+  rank: number;
+}
 
-export default function PlayerCard({ player, rank }) {
+export default function PlayerCard({ player, rank }: PlayerCardProps) {
   return (
     <div className="card-b-flat flex items-center justify-between hover:shadow-brutal transition-shadow">
       <div>

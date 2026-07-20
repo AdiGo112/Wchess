@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useRef } from "react";
 
+export interface EngineMove {
+  from: string;
+  to: string;
+  promotion?: string;
+}
+
+interface Level {
+  skill: number;
+  movetime: number;
+}
+
 // Difficulty 1-5 → UCI "Skill Level" (0-20) + thinking time. Both knobs matter:
 // skill alone still finds strong moves given time, so weak levels also think less.
-const LEVELS = {
+const LEVELS: Record<number, Level> = {
   1: { skill: 0, movetime: 200 },
   2: { skill: 5, movetime: 400 },
   3: { skill: 10, movetime: 600 },
@@ -15,11 +26,11 @@ const LEVELS = {
  * device, so computer games cost the server no CPU. The worker is only created
  * when `enabled`, which keeps the 7.3MB wasm off every other page.
  *
- * Returns getBestMove(fen) → Promise<{ from, to, promotion } | null>.
+ * Returns getBestMove(fen) → Promise<EngineMove | null>.
  */
-export default function useStockfish(enabled, difficulty = 3) {
-  const workerRef = useRef(null);
-  const resolveRef = useRef(null);
+export default function useStockfish(enabled: boolean, difficulty = 3) {
+  const workerRef = useRef<Worker | null>(null);
+  const resolveRef = useRef<((move: EngineMove | null) => void) | null>(null);
   const level = LEVELS[difficulty] ?? LEVELS[3];
 
   useEffect(() => {
@@ -28,8 +39,8 @@ export default function useStockfish(enabled, difficulty = 3) {
     const worker = new Worker("/engine/stockfish-18-lite-single.js");
     workerRef.current = worker;
 
-    worker.onmessage = (e) => {
-      const line = typeof e.data === "string" ? e.data : e.data?.data;
+    worker.onmessage = (e: MessageEvent) => {
+      const line = typeof e.data === "string" ? e.data : (e.data as { data?: string })?.data;
       if (typeof line !== "string" || !line.startsWith("bestmove")) return;
 
       const resolve = resolveRef.current;
@@ -57,7 +68,7 @@ export default function useStockfish(enabled, difficulty = 3) {
   }, [enabled, level.skill]);
 
   const getBestMove = useCallback(
-    (fen) =>
+    (fen: string): Promise<EngineMove | null> =>
       new Promise((resolve) => {
         const worker = workerRef.current;
         if (!worker) return resolve(null);

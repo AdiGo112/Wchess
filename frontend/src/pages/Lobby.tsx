@@ -1,19 +1,20 @@
-import React, { useState } from "react";
+import { ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Copy } from "lucide-react";
 import api from "../api";
 import useMatchmakingSocket from "../hooks/useMatchmakingSocket";
-import VariantSelector, { TIME_PRESETS } from "../components/VariantSelector";
+import VariantSelector, { TIME_PRESETS, TimePreset } from "../components/VariantSelector";
 import DifficultySlider from "../components/DifficultySlider";
+import type { ChallengeCreatedResponse } from "../types";
 
-function fmt(seconds) {
+function fmt(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-const Card = ({ index, title, children }) => (
+const Card = ({ index, title, children }: { index: number; title: string; children: ReactNode }) => (
   <div className="flex-1 min-w-[280px] card-b">
     <div className="flex items-baseline gap-2 mb-5">
       <span className="font-display text-neutral-300 text-3xl leading-none select-none">
@@ -25,22 +26,24 @@ const Card = ({ index, title, children }) => (
   </div>
 );
 
+type CreatorColor = "white" | "black" | "random";
+
 export default function Lobby() {
   const navigate = useNavigate();
   const { joinQueue, leaveQueue, isSearching, searchSeconds, position } = useMatchmakingSocket();
 
   // Quick match
-  const [quickPreset, setQuickPreset] = useState(TIME_PRESETS[3]); // 5|0 Blitz
+  const [quickPreset, setQuickPreset] = useState<TimePreset>(TIME_PRESETS[3]); // 5|0 Blitz
 
   // Friend challenge
-  const [friendPreset, setFriendPreset] = useState(TIME_PRESETS[4]); // 10|0 Rapid
-  const [creatorColor, setCreatorColor] = useState("random");
-  const [shareUrl, setShareUrl] = useState(null);
+  const [friendPreset, setFriendPreset] = useState<TimePreset>(TIME_PRESETS[4]); // 10|0 Rapid
+  const [creatorColor, setCreatorColor] = useState<CreatorColor>("random");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Computer
   const [difficulty, setDifficulty] = useState(3);
-  const [computerPreset, setComputerPreset] = useState(TIME_PRESETS[3]);
+  const [computerPreset, setComputerPreset] = useState<TimePreset>(TIME_PRESETS[3]);
   const [starting, setStarting] = useState(false);
 
   const findGame = () => joinQueue({ timeControl: quickPreset.timeControl, increment: quickPreset.increment });
@@ -48,7 +51,7 @@ export default function Lobby() {
   const createChallenge = async () => {
     setCreating(true);
     try {
-      const { data } = await api.post("/matchmaking/challenge", {
+      const { data } = await api.post<ChallengeCreatedResponse>("/matchmaking/challenge", {
         variant: friendPreset.variant,
         timeControl: friendPreset.timeControl,
         increment: friendPreset.increment,
@@ -63,6 +66,7 @@ export default function Lobby() {
   };
 
   const copyLink = async () => {
+    if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast.success("Link copied");
@@ -74,7 +78,7 @@ export default function Lobby() {
   const startComputer = async () => {
     setStarting(true);
     try {
-      const { data } = await api.post("/matchmaking/computer", {
+      const { data } = await api.post<{ gameId: string }>("/matchmaking/computer", {
         difficulty,
         variant: computerPreset.variant,
         timeControl: computerPreset.timeControl,
@@ -159,7 +163,7 @@ export default function Lobby() {
               <div className="mt-5">
                 <p className="label-b">Your color</p>
                 <div className="flex gap-2">
-                  {["white", "black", "random"].map((c) => (
+                  {(["white", "black", "random"] as const).map((c) => (
                     <button
                       key={c}
                       onClick={() => setCreatorColor(c)}
