@@ -140,7 +140,24 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
-`feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; ready to merge.
+`fix/join-room-authz` — security fix from the ts-migration ultrareview. DONE, verified.
+
+- **Non-player join_room + disconnect could forfeit the real black player.** `handleJoinRoom`
+  stamped `client.data.roomId` for ANY authed socket; on disconnect, a non-player's userId
+  fell through to `color='black'` (`whitePlayer.id === userId ? 'white' : 'black'`), arming
+  the 60s abandonment timer → 60s later the actual black player lost a *rated* ABANDONED
+  game. Pre-existing (predates server-clocks); the CAS work made the bad settlement more
+  reliable, which is how the review surfaced it.
+- **Fix:** stamp `client.data.roomId` only for players (`isWhite || isBlack`) — its sole
+  consumer is the abandonment timer, so non-players can no longer arm it. Plus a
+  defense-in-depth membership check in `handleDisconnect` so a non-player userId never
+  resolves to a color. Non-players may still observe (soft-spectate) — behavior unchanged.
+- **Verified live (`frontend/scripts/verify-join-authz.mjs`), 2/2:** exploit is dead
+  (non-player join+disconnect leaves the game untouched after 64s) AND control still works
+  (real black player's disconnect → white wins by ABANDONED after 60s).
+
+## Previously In Progress
+`feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; merged to `dev`.
 
 - **#3 `prisma.$transaction`**: game row + both rating upserts commit atomically in
   `saveCompletedGame` (leaderboard ZADDs stay outside — Redis can't join a PG tx).
