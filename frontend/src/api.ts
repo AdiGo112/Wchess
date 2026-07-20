@@ -1,27 +1,38 @@
-import axios from "axios";
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:3000/api/v1",
+  baseURL: `${import.meta.env.VITE_SERVER_URL || "http://localhost:3000"}/api/v1`,
   headers: { "Content-Type": "application/json" },
 });
 
-let _getToken = null;
-let _refreshToken = null;
-let _logout = null;
+type GetToken = () => string | null;
+type RefreshToken = () => Promise<string | null>;
+type Logout = () => void;
 
-export function setupInterceptors(getToken, refreshToken, logout) {
+let _getToken: GetToken | null = null;
+let _refreshToken: RefreshToken | null = null;
+let _logout: Logout | null = null;
+
+export function setupInterceptors(getToken: GetToken, refreshToken: RefreshToken, logout: Logout) {
   _getToken = getToken;
   _refreshToken = refreshToken;
   _logout = logout;
 }
 
-let isRefreshing = false;
-let failedQueue = [];
+interface QueuedRequest {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}
 
-function processQueue(error, token = null) {
-  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
+let isRefreshing = false;
+let failedQueue: QueuedRequest[] = [];
+
+function processQueue(error: unknown, token: string | null = null) {
+  failedQueue.forEach((p) => (error || !token ? p.reject(error) : p.resolve(token)));
   failedQueue = [];
 }
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 api.interceptors.request.use((config) => {
   const token = _getToken?.();
@@ -31,21 +42,22 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => res,
-  async (error) => {
-    const original = error.config;
+  async (error: AxiosError) => {
+    const original = error.config as RetriableConfig | undefined;
+    if (!original) return Promise.reject(error);
 
     const skipRetry = ["/auth/refresh", "/auth/login", "/auth/logout"];
     const requestPath = original.url?.split("?")?.[0];
     if (
       error.response?.status !== 401 ||
       original._retry ||
-      skipRetry.includes(requestPath)
+      (requestPath && skipRetry.includes(requestPath))
     ) {
       return Promise.reject(error);
     }
 
     if (isRefreshing) {
-      return new Promise((resolve, reject) => {
+      return new Promise<string>((resolve, reject) => {
         failedQueue.push({ resolve, reject });
       }).then((token) => {
         original.headers["Authorization"] = `Bearer ${token}`;

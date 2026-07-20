@@ -1,16 +1,17 @@
-import React from "react";
-
 const LABELS = ["Pawn", "Knight", "Bishop", "Rook", "Queen"];
+
+interface DifficultySliderProps {
+  /** 1..5 */
+  value: number;
+  onChange: (value: number) => void;
+}
 
 /**
  * Stockfish difficulty (1-5) as five discrete steps — a brutalist segmented
  * control instead of a range input (range thumbs can't be styled monochrome
  * consistently across browsers, and 5 discrete values never needed a slider).
- * @param {object} props
- * @param {number} props.value - 1..5
- * @param {(value: number) => void} props.onChange
  */
-export default function DifficultySlider({ value, onChange }) {
+export default function DifficultySlider({ value, onChange }: DifficultySliderProps) {
   return (
     <div className="flex border-[3px] border-ink divide-x-[3px] divide-ink">
       {LABELS.map((label, i) => {

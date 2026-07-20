@@ -28,7 +28,7 @@ Unauthenticated connections are rejected immediately.
 | `offer_draw` | `{ roomId }` | Offer a draw |
 | `accept_draw` | `{ roomId }` | Accept draw offer |
 | `decline_draw` | `{ roomId }` | Decline draw offer |
-| `claim_timeout` | `{ roomId }` | Claim opponent ran out of time |
+| `claim_timeout` | `{ roomId }` | Claim opponent's flag (server re-verifies live remaining time). Near-redundant since the 1s server sweeper flags automatically (ADR-0004) — kept for instant client-side resolution |
 | `request_takeback` | `{ roomId }` | Request to undo last move |
 | `accept_takeback` | `{ roomId }` | Accept takeback request |
 | `decline_takeback` | `{ roomId }` | Decline takeback |
@@ -56,7 +56,7 @@ Unauthenticated connections are rejected immediately.
 | `takeback_declined` | `{}` | Takeback refused |
 | `opponent_disconnected` | `{ grace: number }` | Opponent left (grace period in seconds) |
 | `opponent_reconnected` | `{}` | Opponent came back |
-| `clock_sync` | `{ timers: { white: ms, black: ms }, serverTime }` | Clock correction |
+| `clock_sync` | `{ roomId, timers: { white: ms, black: ms }, serverTime }` | Authoritative clock correction, pushed every 1s to each active room by the deadline sweeper (ADR-0004); client interpolates between pushes |
 | `invalid_move` | `{ reason }` | Move rejected |
 | `spectator_count` | `{ count }` | Spectator count updated |
 | `rating_update` | `{ white: { username, newRating, diff }, black: ... }` | Post-game ratings |

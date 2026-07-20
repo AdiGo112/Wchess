@@ -1,23 +1,34 @@
-import React, { useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
+import { AxiosError } from "axios";
 import { useAuth } from "../context/AuthContext";
+import type { ApiError } from "../types";
+
+interface SignupForm {
+  username: string;
+  email: string;
+  name: string;
+  password: string;
+  confirmPassword: string;
+}
 
 export default function SignupPage() {
-  const [form, setForm] = useState({ username: "", email: "", name: "", password: "", confirmPassword: "" });
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [form, setForm] = useState<SignupForm>({ username: "", email: "", name: "", password: "", confirmPassword: "" });
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof SignupForm, string>>>({});
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { register } = useAuth();
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    if (fieldErrors[e.target.name]) {
-      setFieldErrors({ ...fieldErrors, [e.target.name]: "" });
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const name = e.target.name as keyof SignupForm;
+    setForm({ ...form, [name]: e.target.value });
+    if (fieldErrors[name]) {
+      setFieldErrors({ ...fieldErrors, [name]: "" });
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
 
@@ -32,7 +43,8 @@ export default function SignupPage() {
       await register({ username, email, name, password });
       toast.success("Account created! Please log in.");
       navigate("/login");
-    } catch (err) {
+    } catch (e) {
+      const err = e as AxiosError<ApiError>;
       const code = err.response?.data?.code;
       if (code === "EMAIL_ALREADY_EXISTS") {
         setFieldErrors({ email: "This email is already registered." });

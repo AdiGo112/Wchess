@@ -50,6 +50,7 @@
 | 1 | Backend gateway: move validation, clocks, terminal states | ✅ | `main` | join_room, move, resign, all terminal states work |
 | 2 | Backend draw + disconnect: offer/accept/decline, auto-resign | ✅ | `feature/game-engine` | Auto-resign timer, reconnect handling, draw accept validation |
 | 3 | Frontend board: color lock, rating modal, rematch | ✅ | `feature/game-engine` | isDraggablePiece color lock; draw offerer/receiver split UI; emoji+You rating modal; rematch flow |
+| 4 | Server clocks (ADR-0004) + room CAS | ✅ | `feature/server-clocks` | Redis ZSET deadline sweeper (1s), 500ms grace, `clock_sync` push, `ActiveRoom.version` + Lua CAS on every mutation, player-guard on all game actions. 8/8 live e2e (`frontend/scripts/verify-clocks.mjs`) |
 
 ---
 
@@ -158,6 +159,7 @@
 
 | # | Increment | Status | Branch | Notes |
 |---|---|---|---|---|
+| 0 | TypeScript migration (foundational, precedes all below) | ✅ | `feature/ts-migration` | All 27 src files JSX/JS → TSX/TS; `strict: true`; shared `src/types.ts` transcribes the socket + REST contracts from `websocket-events.md`/`api-reference.md`; `@types/react` pinned to 18 to match runtime; `tsc --noEmit` added to build gate. tsc + vite build clean, dev-server entry graph transforms with 0 errors |
 | 1 | Zustand stores: auth, game, ui, notification | ❌ | `feature/frontend-ui` | Not started |
 | 2 | React Query hooks: all API hooks | ❌ | `feature/frontend-ui` | Not started |
 | 3 | Sound effects: useSound hook, all game sounds | ❌ | `feature/frontend-ui` | Not started |

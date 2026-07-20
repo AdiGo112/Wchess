@@ -1,14 +1,21 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ChessGame from "../components/ChessGame";
+
+interface GameLocationState {
+  roomId?: string;
+  mode?: string;
+  timeControl?: number;
+}
 
 export default function Game() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { roomId: routeRoomId } = useParams();
+  const { roomId: routeRoomId } = useParams<{ roomId: string }>();
 
-  const [roomId] = useState(routeRoomId || location.state?.roomId);
-  const { mode, timeControl } = location.state || {};
+  const state = (location.state || {}) as GameLocationState;
+  const [roomId] = useState(routeRoomId || state.roomId);
+  const { mode, timeControl } = state;
 
   // Matchmaking now lives in the Lobby; the game page only renders a known room.
   useEffect(() => {

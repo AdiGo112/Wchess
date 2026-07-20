@@ -56,18 +56,19 @@ STOCKFISH_BINARY_PATH=/usr/local/bin/stockfish
 
 ## frontend/.env (development)
 
+> Implemented 2026-07-19 as ONE origin-only var (not the API/WS pair originally
+> planned): REST and WebSocket share the same backend origin, and `api.js`
+> appends `/api/v1` itself. Optional in dev — defaults to localhost:3000.
+
 ```env
-VITE_API_URL=http://localhost:3000/api/v1
-VITE_WS_URL=http://localhost:3000
-VITE_ENV=development
+VITE_SERVER_URL=http://localhost:3000
 ```
 
 ## frontend/.env.example
 
 ```env
-VITE_API_URL=http://localhost:3000/api/v1
-VITE_WS_URL=http://localhost:3000
-VITE_ENV=development
+# Backend origin (no path). Local dev default is http://localhost:3000
+VITE_SERVER_URL=http://localhost:3000
 ```
 
 ---
@@ -88,8 +89,7 @@ VITE_ENV=development
 | `SENDGRID_API_KEY` | No | Required only for email notifications |
 | `EMAIL_FROM` | No | Sender address for emails |
 | `STOCKFISH_BINARY_PATH` | No | Path to native Stockfish binary (backend analysis) |
-| `VITE_API_URL` | Yes (frontend) | Backend REST API base URL |
-| `VITE_WS_URL` | Yes (frontend) | Backend WebSocket URL |
+| `VITE_SERVER_URL` | No (frontend; defaults to `http://localhost:3000`) | Backend origin for both REST (`/api/v1` appended in `api.js`) and WebSocket |
 
 ---
 

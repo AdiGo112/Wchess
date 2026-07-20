@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import { AxiosError } from "axios";
 import api from "../api";
+import type { ApiError, ChallengeAcceptResponse } from "../types";
 
-const ERROR_COPY = {
+const ERROR_COPY: Record<string, string> = {
   CHALLENGE_NOT_FOUND: "This challenge link is invalid.",
   CHALLENGE_EXPIRED: "This challenge link has expired.",
   CHALLENGE_ALREADY_ACCEPTED: "This challenge has already been accepted.",
@@ -15,9 +17,9 @@ const ERROR_COPY = {
  * Accepts the challenge server-side, then drops the user into the game.
  */
 export default function ChallengeAccept() {
-  const { token } = useParams();
+  const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const ranRef = useRef(false);
 
   useEffect(() => {
@@ -25,16 +27,16 @@ export default function ChallengeAccept() {
     ranRef.current = true;
 
     api
-      .post(`/matchmaking/challenge/${token}/accept`)
+      .post<ChallengeAcceptResponse>(`/matchmaking/challenge/${token}/accept`)
       .then(({ data }) =>
         navigate(`/game/${data.gameId}`, {
           replace: true,
           state: { timeControl: data.timeControl },
         }),
       )
-      .catch((err) => {
+      .catch((err: AxiosError<ApiError>) => {
         const code = err.response?.data?.code;
-        const msg = ERROR_COPY[code] || "Could not accept this challenge.";
+        const msg = (code && ERROR_COPY[code]) || "Could not accept this challenge.";
         setError(msg);
         toast.error(msg);
       });

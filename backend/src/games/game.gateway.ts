@@ -8,26 +8,113 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Chess } from 'chess.js';
 import { JwtService } from '@nestjs/jwt';
-import { GamesService, ActiveRoom } from './games.service';
+import { GamesService, ActiveRoom, CLOCK_GRACE_MS } from './games.service';
 import { RedisService } from '../common/redis/redis.service';
+
+/** How many times a handler re-runs itself after losing a CAS race. */
+const CAS_RETRIES = 3;
+const SWEEP_INTERVAL_MS = 1000;
 
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true },
   namespace: '/',
 })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(GameGateway.name);
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
+  private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private gamesService: GamesService,
     private redis: RedisService,
     private jwtService: JwtService,
   ) {}
+
+  onModuleInit() {
+    // ADR-0004 addendum: one sweeper over the clock:deadlines ZSET instead of
+    // one setInterval per game. Deadlines live in Redis, so they survive a
+    // restart — a game whose player vanished still flags on schedule.
+    this.sweepTimer = setInterval(() => {
+      this.sweep().catch((err) => this.logger.error('Clock sweep failed', err));
+    }, SWEEP_INTERVAL_MS);
+  }
+
+  onModuleDestroy() {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+  }
+
+  private sideToMove(room: ActiveRoom): 'white' | 'black' {
+    return room.fen.split(' ')[1] === 'w' ? 'white' : 'black';
+  }
+
+  private isPlayer(room: ActiveRoom, userId: string): boolean {
+    return room.whitePlayer.id === userId || room.blackPlayer?.id === userId;
+  }
+
+  /**
+   * One pass of the server-authoritative clock (ADR-0004): for every watched
+   * room, either end it on flag-fall (past deadline + grace) or push a
+   * clock_sync so clients can correct their local interpolation.
+   */
+  private async sweep() {
+    const now = Date.now();
+    for (const roomId of await this.gamesService.watchedRooms()) {
+      const room = await this.gamesService.getRoom(roomId);
+      if (!room || room.status !== 'active') {
+        await this.gamesService.clearDeadline(roomId);
+        continue;
+      }
+      const side = this.sideToMove(room);
+      const remaining = room.timers[side] - (now - room.lastMoveAt);
+
+      if (remaining <= -CLOCK_GRACE_MS) {
+        const ended = await this.claimEnd(roomId, (r) => {
+          const s = this.sideToMove(r);
+          const rem = r.timers[s] - (Date.now() - r.lastMoveAt);
+          if (rem > -CLOCK_GRACE_MS) return false; // a racing move re-armed the clock
+          r.timers[s] = 0;
+          return true;
+        });
+        if (ended) {
+          const flagged = this.sideToMove(ended);
+          await this.endGame(ended, flagged === 'white' ? 'BLACK' : 'WHITE', 'TIMEOUT');
+        }
+        continue;
+      }
+
+      this.server.to(roomId).emit('clock_sync', {
+        roomId,
+        timers: { ...room.timers, [side]: Math.max(0, remaining) },
+        serverTime: now,
+      });
+    }
+  }
+
+  /**
+   * CAS-claim an active room into 'ended'. The claim IS the room's final
+   * write — of two racing enders (sweeper vs claim_timeout vs resign) exactly
+   * one wins and settles ratings; the loser sees status !== 'active' and backs
+   * off. `mutate` may veto (return false) or adjust the room pre-claim.
+   */
+  private async claimEnd(
+    roomId: string,
+    mutate?: (room: ActiveRoom) => boolean,
+  ): Promise<ActiveRoom | null> {
+    for (let i = 0; i <= CAS_RETRIES; i++) {
+      const room = await this.gamesService.getRoom(roomId);
+      if (!room || room.status !== 'active') return null;
+      if (mutate && !mutate(room)) return null;
+      room.status = 'ended';
+      if (await this.gamesService.casSaveRoom(room)) return room;
+    }
+    return null;
+  }
 
   async handleConnection(client: Socket) {
     try {
@@ -69,8 +156,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomId = client.data.roomId;
     if (roomId) {
       const room = await this.gamesService.getRoom(roomId);
-      if (room && room.status === 'active') {
-        const color = room.whitePlayer.id === userId ? 'white' : 'black';
+      const isWhite = room?.whitePlayer.id === userId;
+      const isBlack = room?.blackPlayer?.id === userId;
+      // Only a genuine player's disconnect can abandon the game. Defense in
+      // depth: roomId is stamped only for players (handleJoinRoom), but never
+      // let a non-player's userId fall through to color='black' and forfeit
+      // the real black player.
+      if (room && room.status === 'active' && (isWhite || isBlack)) {
+        const color = isWhite ? 'white' : 'black';
         this.server.to(roomId).emit('opponent_disconnected', { roomId, grace: 60000 });
 
         const timerKey = `${roomId}:${color}`;
@@ -79,10 +172,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         const timer = setTimeout(async () => {
           this.disconnectTimers.delete(timerKey);
-          const current = await this.gamesService.getRoom(roomId);
-          if (!current || current.status !== 'active') return;
+          const ended = await this.claimEnd(roomId);
+          if (!ended) return;
           const winner = color === 'white' ? 'BLACK' : 'WHITE';
-          await this.endGame(current, winner as 'WHITE' | 'BLACK', 'ABANDONED');
+          await this.endGame(ended, winner, 'ABANDONED');
         }, 60_000);
 
         this.disconnectTimers.set(timerKey, timer);
@@ -96,17 +189,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleJoinRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room) return client.emit('error', { message: 'Room not found' });
 
     const userId = client.data.userId;
-    client.join(data.roomId);
-    client.data.roomId = data.roomId;
-
-    // Reconnect: player is returning to an active game
     const isWhite = room.whitePlayer.id === userId;
     const isBlack = room.blackPlayer?.id === userId;
+
+    client.join(data.roomId);
+    // Stamp roomId ONLY for players: it is used solely to arm the disconnect
+    // abandonment timer. A non-player who opens a shared game URL may observe,
+    // but must never be able to arm that timer — otherwise their disconnect
+    // would forfeit the real black player (whose color a non-player's userId
+    // falls through to in handleDisconnect).
+    if (isWhite || isBlack) client.data.roomId = data.roomId;
+
+    // Reconnect: player is returning to an active game
     if ((isWhite || isBlack) && room.status === 'active') {
       const color = isWhite ? 'white' : 'black';
       const timerKey = `${data.roomId}:${color}`;
@@ -136,7 +236,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       room.status = 'active';
       room.startedAt = Date.now();
       room.lastMoveAt = Date.now();
-      await this.gamesService.setRoom(room);
+      if (!(await this.gamesService.casSaveRoom(room))) {
+        // Both players joined at once — the loser reruns and takes the
+        // reconnect path against the now-active room.
+        if (attempt < CAS_RETRIES) return this.handleJoinRoom(client, data, attempt + 1);
+        return;
+      }
+      // The game is live: white's clock is now running (ADR-0004).
+      await this.gamesService.setDeadline(room);
     }
 
     this.server.to(data.roomId).emit('game_start', {
@@ -155,6 +262,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleMove(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; from: string; to: string; promotion?: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active') {
@@ -175,13 +283,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return client.emit('invalid_move', { roomId: data.roomId, reason: 'Not your turn' });
     }
 
-    // Update clock
+    // Clock (ADR-0004): judge flag-fall on the raw remaining time BEFORE any
+    // increment, with the grace margin absorbing network lag.
     const now = Date.now();
-    const elapsed = now - room.lastMoveAt;
     const color = turn === 'w' ? 'white' : 'black';
-    room.timers[color] = Math.max(0, room.timers[color] - elapsed) + room.increment * 1000;
+    const raw = room.timers[color] - (now - room.lastMoveAt);
 
-    if (room.timers[color] <= 0) {
+    if (raw <= -CLOCK_GRACE_MS) {
+      // Flagged before this move arrived (sweeper just hasn't fired yet).
+      room.timers[color] = 0;
+      room.status = 'ended';
+      if (!(await this.gamesService.casSaveRoom(room))) {
+        if (attempt < CAS_RETRIES) return this.handleMove(client, data, attempt + 1);
+        return;
+      }
       return this.endGame(room, turn === 'w' ? 'BLACK' : 'WHITE', 'TIMEOUT');
     }
 
@@ -196,12 +311,28 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return client.emit('invalid_move', { roomId: data.roomId, reason: 'Illegal move' });
       }
 
+      room.timers[color] = Math.max(0, raw) + room.increment * 1000;
       room.fen = chess.fen();
       room.moves.push(moveResult.san);
       room.lastMoveAt = now;
       room.drawOfferedBy = null;
 
-      await this.gamesService.setRoom(room);
+      // Terminal moves claim 'ended' in the SAME write as the move, so no
+      // second ender can race in between.
+      let result: 'WHITE' | 'BLACK' | 'DRAW' | null = null;
+      let reason: string | null = null;
+      if (chess.isCheckmate()) { result = turn === 'w' ? 'WHITE' : 'BLACK'; reason = 'CHECKMATE'; }
+      else if (chess.isStalemate()) { result = 'DRAW'; reason = 'STALEMATE'; }
+      else if (chess.isInsufficientMaterial()) { result = 'DRAW'; reason = 'INSUFFICIENT_MATERIAL'; }
+      else if (chess.isThreefoldRepetition()) { result = 'DRAW'; reason = 'THREEFOLD_REPETITION'; }
+      else if (chess.isDraw()) { result = 'DRAW'; reason = 'FIFTY_MOVE'; }
+      if (result) room.status = 'ended';
+
+      if (!(await this.gamesService.casSaveRoom(room))) {
+        // Lost a race (draw offer, disconnect-ender, …) — redo from fresh state.
+        if (attempt < CAS_RETRIES) return this.handleMove(client, data, attempt + 1);
+        return client.emit('invalid_move', { roomId: data.roomId, reason: 'Conflict, retry' });
+      }
 
       this.server.to(data.roomId).emit('move_made', {
         roomId: room.id,
@@ -218,14 +349,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         drawOfferedBy: null, // move always cancels any pending draw offer
       });
 
-      // Check terminal states
-      if (chess.isCheckmate()) {
-        return this.endGame(room, turn === 'w' ? 'WHITE' : 'BLACK', 'CHECKMATE');
+      if (result) {
+        return this.endGame(room, result, reason!);
       }
-      if (chess.isStalemate()) return this.endGame(room, 'DRAW', 'STALEMATE');
-      if (chess.isInsufficientMaterial()) return this.endGame(room, 'DRAW', 'INSUFFICIENT_MATERIAL');
-      if (chess.isThreefoldRepetition()) return this.endGame(room, 'DRAW', 'THREEFOLD_REPETITION');
-      if (chess.isDraw()) return this.endGame(room, 'DRAW', 'FIFTY_MOVE');
+      // Re-arm the deadline for the side now to move.
+      await this.gamesService.setDeadline(room);
     } catch (e) {
       client.emit('invalid_move', { roomId: data.roomId, reason: 'Invalid move format' });
     }
@@ -236,26 +364,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
   ) {
-    const room = await this.gamesService.getRoom(data.roomId);
-    if (!room || room.status !== 'active') return;
-
     const userId = client.data.userId;
-    const result = room.whitePlayer.id === userId ? 'BLACK' : 'WHITE';
-    await this.endGame(room, result as any, 'RESIGNATION');
+    const ended = await this.claimEnd(data.roomId, (r) => this.isPlayer(r, userId));
+    if (!ended) return;
+
+    const result = ended.whitePlayer.id === userId ? 'BLACK' : 'WHITE';
+    await this.endGame(ended, result, 'RESIGNATION');
   }
 
   @SubscribeMessage('offer_draw')
   async handleOfferDraw(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active') return;
 
     const userId = client.data.userId;
+    if (!this.isPlayer(room, userId)) return;
+
     const byColor = room.whitePlayer.id === userId ? 'white' : 'black';
     room.drawOfferedBy = byColor;
-    await this.gamesService.setRoom(room);
+    if (!(await this.gamesService.casSaveRoom(room))) {
+      if (attempt < CAS_RETRIES) return this.handleOfferDraw(client, data, attempt + 1);
+      return;
+    }
 
     this.server.to(data.roomId).emit('draw_offered', { roomId: room.id, byColor });
   }
@@ -265,26 +399,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
   ) {
-    const room = await this.gamesService.getRoom(data.roomId);
-    if (!room || room.status !== 'active' || !room.drawOfferedBy) return;
-
     const userId = client.data.userId;
-    const acceptorColor = room.whitePlayer.id === userId ? 'white' : 'black';
-    if (acceptorColor === room.drawOfferedBy) return; // can't accept your own offer
+    const ended = await this.claimEnd(data.roomId, (r) => {
+      if (!r.drawOfferedBy || !this.isPlayer(r, userId)) return false;
+      const acceptorColor = r.whitePlayer.id === userId ? 'white' : 'black';
+      return acceptorColor !== r.drawOfferedBy; // can't accept your own offer
+    });
+    if (!ended) return;
 
-    await this.endGame(room, 'DRAW', 'AGREEMENT');
+    await this.endGame(ended, 'DRAW', 'AGREEMENT');
   }
 
   @SubscribeMessage('decline_draw')
   async handleDeclineDraw(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room) return;
+    if (!this.isPlayer(room, client.data.userId)) return;
 
     room.drawOfferedBy = null;
-    await this.gamesService.setRoom(room);
+    if (!(await this.gamesService.casSaveRoom(room))) {
+      if (attempt < CAS_RETRIES) return this.handleDeclineDraw(client, data, attempt + 1);
+      return;
+    }
     this.server.to(data.roomId).emit('draw_declined', { roomId: room.id });
   }
 
@@ -292,15 +432,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleRematchRequest(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'ended' || !room.blackPlayer || room.blackPlayer.id === 'computer') return;
 
     const userId = client.data.userId;
+    if (!this.isPlayer(room, userId)) return;
 
     if (!room.rematchRequestedBy) {
       room.rematchRequestedBy = userId;
-      await this.gamesService.setRoom(room);
+      if (!(await this.gamesService.casSaveRoom(room))) {
+        // Both players clicked rematch at once — rerun; the loser now sees the
+        // winner's request and takes the create-room branch below.
+        if (attempt < CAS_RETRIES) return this.handleRematchRequest(client, data, attempt + 1);
+        return;
+      }
       this.server.to(data.roomId).emit('rematch_offered', { byUserId: userId });
     } else if (room.rematchRequestedBy !== userId) {
       // Both players want rematch — swap colors and create new room
@@ -319,19 +466,21 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
   ) {
-    const room = await this.gamesService.getRoom(data.roomId);
-    if (!room || room.status !== 'active') return;
-
     const userId = client.data.userId;
-    const chess = new Chess(room.fen);
-    const turn = chess.turn();
-    const isOpponentWhite = room.whitePlayer.id !== userId;
+    const ended = await this.claimEnd(data.roomId, (r) => {
+      if (!this.isPlayer(r, userId)) return false;
+      const flagged = this.sideToMove(r);
+      const claimant = r.whitePlayer.id === userId ? 'white' : 'black';
+      if (flagged === claimant) return false; // only the opponent's flag is claimable
+      const rem = r.timers[flagged] - (Date.now() - r.lastMoveAt);
+      if (rem > -CLOCK_GRACE_MS) return false;
+      r.timers[flagged] = 0;
+      return true;
+    });
+    if (!ended) return;
 
-    const timedOutColor = isOpponentWhite ? 'white' : 'black';
-    if (room.timers[timedOutColor] <= 0) {
-      const winner = timedOutColor === 'white' ? 'BLACK' : 'WHITE';
-      await this.endGame(room, winner as any, 'TIMEOUT');
-    }
+    const flagged = this.sideToMove(ended);
+    await this.endGame(ended, flagged === 'white' ? 'BLACK' : 'WHITE', 'TIMEOUT');
   }
 
   /**
@@ -346,6 +495,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleComputerMove(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; from: string; to: string; promotion?: string },
+    attempt = 0,
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active') return;
@@ -363,13 +513,25 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!move) return;
 
     const now = Date.now();
-    const elapsed = now - room.lastMoveAt;
-    room.timers.black = Math.max(0, room.timers.black - elapsed) + room.increment * 1000;
+    const raw = room.timers.black - (now - room.lastMoveAt);
+    room.timers.black = Math.max(0, raw) + room.increment * 1000;
     room.fen = chess.fen();
     room.moves.push(move.san);
     room.lastMoveAt = now;
 
-    await this.gamesService.setRoom(room);
+    let result: 'BLACK' | 'DRAW' | null = null;
+    let reason: string | null = null;
+    if (chess.isCheckmate()) { result = 'BLACK'; reason = 'CHECKMATE'; }
+    else if (chess.isStalemate()) { result = 'DRAW'; reason = 'STALEMATE'; }
+    else if (chess.isInsufficientMaterial()) { result = 'DRAW'; reason = 'INSUFFICIENT_MATERIAL'; }
+    else if (chess.isThreefoldRepetition()) { result = 'DRAW'; reason = 'THREEFOLD_REPETITION'; }
+    else if (chess.isDraw()) { result = 'DRAW'; reason = 'FIFTY_MOVE'; }
+    if (result) room.status = 'ended';
+
+    if (!(await this.gamesService.casSaveRoom(room))) {
+      if (attempt < CAS_RETRIES) return this.handleComputerMove(client, data, attempt + 1);
+      return;
+    }
 
     this.server.to(data.roomId).emit('move_made', {
       roomId: room.id,
@@ -380,20 +542,21 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       drawOfferedBy: null,
     });
 
-    if (chess.isCheckmate()) return this.endGame(room, 'BLACK', 'CHECKMATE');
-    if (chess.isStalemate()) return this.endGame(room, 'DRAW', 'STALEMATE');
-    if (chess.isInsufficientMaterial()) return this.endGame(room, 'DRAW', 'INSUFFICIENT_MATERIAL');
-    if (chess.isThreefoldRepetition()) return this.endGame(room, 'DRAW', 'THREEFOLD_REPETITION');
-    if (chess.isDraw()) return this.endGame(room, 'DRAW', 'FIFTY_MOVE');
+    if (result) return this.endGame(room, result, reason!);
+    await this.gamesService.setDeadline(room);
   }
 
+  /**
+   * Persist and announce a game the caller has ALREADY written as 'ended'
+   * (via claimEnd or a terminal-move CAS). This method never writes the room —
+   * the claim is the write — so double rating settlement is impossible.
+   */
   private async endGame(
     room: ActiveRoom,
     result: 'WHITE' | 'BLACK' | 'DRAW' | 'ABORTED',
     reason: string,
   ) {
-    room.status = 'ended';
-    await this.gamesService.setRoom(room);
+    await this.gamesService.clearDeadline(room.id);
 
     let ratingChanges = null;
     if (room.blackPlayer && room.blackPlayer.id !== 'computer') {

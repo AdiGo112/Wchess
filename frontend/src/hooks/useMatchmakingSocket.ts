@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../context/SocketContext";
+import type { ChallengeAcceptedPayload, MatchFoundPayload, QueuePositionPayload } from "../types";
+
+interface QueueParams {
+  timeControl: number;
+  increment?: number;
+}
 
 /**
  * Wires the shared game socket for matchmaking: join/leave the quick-match
@@ -15,15 +21,17 @@ export default function useMatchmakingSocket() {
   const navigate = useNavigate();
   const [isSearching, setIsSearching] = useState(false);
   const [searchSeconds, setSearchSeconds] = useState(0);
-  const [position, setPosition] = useState(null);
-  // The queue we intend to be in: { timeControl, increment } | null. Doubles as
-  // "are we searching" for re-join, and carries the params to re-emit.
-  const desiredQueueRef = useRef(null);
+  const [position, setPosition] = useState<number | null>(null);
+  // The queue we intend to be in. Doubles as "are we searching" for re-join,
+  // and carries the params to re-emit.
+  const desiredQueueRef = useRef<QueueParams | null>(null);
 
   useEffect(() => {
     if (!socket) return;
 
-    const goToGame = (data) => {
+    const goToGame = (
+      data: Partial<MatchFoundPayload & ChallengeAcceptedPayload & { gameId: string }>,
+    ) => {
       const roomId = data?.roomId || data?.gameId;
       if (!roomId) return;
       desiredQueueRef.current = null;
@@ -32,7 +40,7 @@ export default function useMatchmakingSocket() {
       navigate(`/game/${roomId}`, { state: { timeControl: data?.timeControl } });
     };
     const onQueued = () => setIsSearching(true);
-    const onPosition = (data) => setPosition(data?.position ?? null);
+    const onPosition = (data: QueuePositionPayload) => setPosition(data?.position ?? null);
     // On a transient reconnect the server dropped our queue entry; re-join so
     // the user isn't stranded on "Searching…" forever.
     const onReconnect = () => {
@@ -66,7 +74,7 @@ export default function useMatchmakingSocket() {
   }, [isSearching]);
 
   const joinQueue = useCallback(
-    ({ timeControl, increment = 0 }) => {
+    ({ timeControl, increment = 0 }: QueueParams) => {
       if (!socket) return;
       desiredQueueRef.current = { timeControl, increment };
       setIsSearching(true);

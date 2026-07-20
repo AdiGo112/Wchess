@@ -140,7 +140,69 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
-`feature/stockfish` — computer games play end to end against real Stockfish. Uncommitted.
+`fix/join-room-authz` — security fix from the ts-migration ultrareview. DONE, verified.
+
+- **Non-player join_room + disconnect could forfeit the real black player.** `handleJoinRoom`
+  stamped `client.data.roomId` for ANY authed socket; on disconnect, a non-player's userId
+  fell through to `color='black'` (`whitePlayer.id === userId ? 'white' : 'black'`), arming
+  the 60s abandonment timer → 60s later the actual black player lost a *rated* ABANDONED
+  game. Pre-existing (predates server-clocks); the CAS work made the bad settlement more
+  reliable, which is how the review surfaced it.
+- **Fix:** stamp `client.data.roomId` only for players (`isWhite || isBlack`) — its sole
+  consumer is the abandonment timer, so non-players can no longer arm it. Plus a
+  defense-in-depth membership check in `handleDisconnect` so a non-player userId never
+  resolves to a color. Non-players may still observe (soft-spectate) — behavior unchanged.
+- **Verified live (`frontend/scripts/verify-join-authz.mjs`), 2/2:** exploit is dead
+  (non-player join+disconnect leaves the game untouched after 64s) AND control still works
+  (real black player's disconnect → white wins by ABANDONED after 60s).
+
+`feature/ts-migration` — frontend fully on TypeScript. DONE, merged.
+
+- All 27 files under `frontend/src` renamed JSX/JS → TSX/TS (via `git mv`, history
+  preserved) and typed. `tsconfig.json` with `strict: true`, `noEmit`, `react-jsx`.
+- **Contract layer** `src/types.ts`: socket event payloads (`GameStartPayload`,
+  `MoveMadePayload`, `GameOverPayload`, `ClockSyncPayload`, `MatchFoundPayload`, …) and
+  REST responses (`AuthResponse`, `GameRecord`, `LeaderboardRow`, …) transcribed straight
+  from `docs/architecture/websocket-events.md` + `api-reference.md`. Every gateway
+  `socket.on(...)` handler and `api.post<T>` call is now typed against these — a payload
+  mismatch with the NestJS server is a compile error.
+- Order: boundaries first (`api.ts`, both contexts, both hooks), then components, then
+  pages, then the big `ChessGame.tsx` last.
+- **Gotcha fixed:** `@types/react` came in as v19 against React 18 runtime — pinned both
+  `@types/react`/`@types/react-dom` to ^18 so the type major matches the runtime major.
+- `tsc --noEmit` added to the `build` script + a standalone `typecheck` script.
+- Verified: `tsc --noEmit` 0 errors, `vite build` clean (1788 modules), `vite dev`
+  transforms the full entry graph (`index.tsx` → `ChessGame.tsx`) with 0 resolution
+  errors. Pure refactor — no runtime behavior change intended or made.
+
+## Previously In Progress
+`feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; merged to `dev`.
+
+- **#3 `prisma.$transaction`**: game row + both rating upserts commit atomically in
+  `saveCompletedGame` (leaderboard ZADDs stay outside — Redis can't join a PG tx).
+- **#4 ThrottlerGuard as APP_GUARD**: verified with a 20-parallel burst → exactly
+  10 pass / rest 429 per the `short` (10/s) window. Global guards don't bind to WS
+  gateways, so socket traffic is unaffected.
+- **#5 `VITE_SERVER_URL`**: ONE origin-only env var replaces the hardcoded
+  `localhost:3000` in BOTH `SocketContext.jsx` and `api.js` (the sprint item named only
+  the socket; api.js had the identical deploy blocker). `frontend/.env.example` added;
+  `environment.md` updated (supersedes the planned VITE_API_URL/VITE_WS_URL pair).
+
+- **#1 Server clocks (ADR-0004)**: `clock:deadlines` Redis ZSET; deadline = lastMoveAt +
+  remaining + 500ms grace, re-armed on every move; one 1s sweeper in `GameGateway`
+  flags expired games (persisted + rated — the hung-game bug is closed) and pushes
+  `clock_sync` to every active room; move path judges flag-fall on raw time BEFORE
+  increment (fixed latent bug) and honors the grace window; `claim_timeout` re-verifies
+  live remaining. Frontend: `clock_sync` listener corrects local interpolation.
+- **#2 Room CAS**: `ActiveRoom.version` + Lua compare-and-set (`casSaveRoom`); all
+  gateway mutations CAS + rerun-on-conflict; terminal moves claim `ended` in the same
+  write as the move; `claimEnd` makes racing enders (sweeper / claim / resign /
+  disconnect) settle exactly once. Bonus: player-guards added to resign / draw /
+  claim_timeout / rematch (any authed socket could previously end any game).
+- **Verified 8/8 live** (`frontend/scripts/verify-clocks.mjs`): hung-game auto-flag +
+  rating, 1s monotonic clock_sync, in-grace late move accepted (clock clamps to 0),
+  double-resign settles once. Beware: first run hit a stale 3:57am server on :3000
+  (EADDRINUSE in watch logs) — kill port 3000 before trusting a verify run.
 
 ## Blocked
 _Nothing blocked._
@@ -215,11 +277,11 @@ ADR-0004 addendum.
 
 | # | Item | Why it can't wait |
 |---|---|---|
-| 1 | Server clocks (ADR-0004) | games hang forever; never saved, never rated |
-| 2 | Room CAS (`version` + Lua) | lock-free read-modify-write on the move path — real on **one** instance |
-| 3 | `prisma.$transaction` in `saveCompletedGame` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
-| 4 | Register `ThrottlerGuard` as `APP_GUARD` | configured in `app.module.ts`, never registered — nothing is throttled |
-| 5 | Socket URL → env var | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
+| 1 | ~~Server clocks (ADR-0004)~~ ✅ `feature/server-clocks` | games hang forever; never saved, never rated |
+| 2 | ~~Room CAS (`version` + Lua)~~ ✅ `feature/server-clocks` | lock-free read-modify-write on the move path — real on **one** instance |
+| 3 | ~~`prisma.$transaction` in `saveCompletedGame`~~ ✅ `feature/server-clocks` | 3 unguarded sequential writes; crash ⇒ ratings silently wrong |
+| 4 | ~~Register `ThrottlerGuard` as `APP_GUARD`~~ ✅ `feature/server-clocks` | configured in `app.module.ts`, never registered — nothing is throttled |
+| 5 | ~~Socket URL → env var~~ ✅ `feature/server-clocks` (`VITE_SERVER_URL`, covers api.js too) | `SocketContext.jsx:19` hardcodes `localhost:3000` — deploy blocker |
 
 Recurring pattern worth a PR-review checklist item: **infra gets configured but not
 wired.** The Redis adapter, the Throttler guard, and Jest (0 `.spec.ts` files) are all

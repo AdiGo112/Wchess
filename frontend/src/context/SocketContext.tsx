@@ -1,18 +1,23 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import { useAuth } from "./AuthContext";
 
-const SocketContext = createContext(null);
+interface SocketContextValue {
+  socket: Socket | null;
+  connected: boolean;
+}
 
-export const SocketProvider = ({ children }) => {
+const SocketContext = createContext<SocketContextValue | null>(null);
+
+export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const { user, getToken } = useAuth();
-  const socketRef = useRef(null);
+  const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     if (!getToken() || !user) return;
 
-    const socket = io("http://localhost:3000", {
+    const socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:3000", {
       auth: (cb) => cb({ token: `Bearer ${getToken()}` }),
       transports: ["websocket"],
       reconnectionDelay: 1000,
@@ -30,6 +35,7 @@ export const SocketProvider = ({ children }) => {
       socketRef.current = null;
       setConnected(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   return (
@@ -39,4 +45,8 @@ export const SocketProvider = ({ children }) => {
   );
 };
 
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = (): SocketContextValue => {
+  const ctx = useContext(SocketContext);
+  if (!ctx) throw new Error("useSocket must be used inside <SocketProvider>");
+  return ctx;
+};
