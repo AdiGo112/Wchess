@@ -156,8 +156,14 @@ export class GameGateway
     const roomId = client.data.roomId;
     if (roomId) {
       const room = await this.gamesService.getRoom(roomId);
-      if (room && room.status === 'active') {
-        const color = room.whitePlayer.id === userId ? 'white' : 'black';
+      const isWhite = room?.whitePlayer.id === userId;
+      const isBlack = room?.blackPlayer?.id === userId;
+      // Only a genuine player's disconnect can abandon the game. Defense in
+      // depth: roomId is stamped only for players (handleJoinRoom), but never
+      // let a non-player's userId fall through to color='black' and forfeit
+      // the real black player.
+      if (room && room.status === 'active' && (isWhite || isBlack)) {
+        const color = isWhite ? 'white' : 'black';
         this.server.to(roomId).emit('opponent_disconnected', { roomId, grace: 60000 });
 
         const timerKey = `${roomId}:${color}`;
@@ -189,12 +195,18 @@ export class GameGateway
     if (!room) return client.emit('error', { message: 'Room not found' });
 
     const userId = client.data.userId;
-    client.join(data.roomId);
-    client.data.roomId = data.roomId;
-
-    // Reconnect: player is returning to an active game
     const isWhite = room.whitePlayer.id === userId;
     const isBlack = room.blackPlayer?.id === userId;
+
+    client.join(data.roomId);
+    // Stamp roomId ONLY for players: it is used solely to arm the disconnect
+    // abandonment timer. A non-player who opens a shared game URL may observe,
+    // but must never be able to arm that timer — otherwise their disconnect
+    // would forfeit the real black player (whose color a non-player's userId
+    // falls through to in handleDisconnect).
+    if (isWhite || isBlack) client.data.roomId = data.roomId;
+
+    // Reconnect: player is returning to an active game
     if ((isWhite || isBlack) && room.status === 'active') {
       const color = isWhite ? 'white' : 'black';
       const timerKey = `${data.roomId}:${color}`;
