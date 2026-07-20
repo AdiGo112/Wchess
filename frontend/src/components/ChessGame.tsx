@@ -1,39 +1,55 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
+import type {
+  ClockSyncPayload,
+  Color,
+  GameOverPayload,
+  GameStartPayload,
+  GameStatePayload,
+  MoveMadePayload,
+  RoomPlayer,
+  Timers,
+} from "../types";
 
 /* Strict-mono board (design system: no hue anywhere).
    Light squares warm-ish grey, dark squares near-ink. Highlights are done
    with inversion + inset rings, never color. */
 const LIGHT_SQ = "#d6d6d6";
 const DARK_SQ = "#3a3a3a";
-const BOARD_STYLE = { borderRadius: 0, boxShadow: "8px 8px 0 0 #0a0a0a" };
+const BOARD_STYLE: CSSProperties = { borderRadius: 0, boxShadow: "8px 8px 0 0 #0a0a0a" };
 
-export default function ChessGame({ roomId, mode, timeControl }) {
+interface ChessGameProps {
+  roomId: string;
+  mode?: string;
+  timeControl?: number;
+}
+
+export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   const navigate = useNavigate();
   const { socket } = useSocket();
   const { user } = useAuth();
 
   const [game, setGame] = useState(new Chess());
   const [fen, setFen] = useState("start");
-  const [orientation, setOrientation] = useState("white");
-  const [timers, setTimers] = useState({ white: (timeControl || 300) * 1000, black: (timeControl || 300) * 1000 });
-  const [gameOver, setGameOver] = useState(null);
-  const [drawOfferedBy, setDrawOfferedBy] = useState(null); // 'white' | 'black' | null
-  const [rematchOfferedBy, setRematchOfferedBy] = useState(null); // userId | null
-  const [players, setPlayers] = useState({ white: null, black: null });
-  const [moveHistory, setMoveHistory] = useState([]);
+  const [orientation, setOrientation] = useState<Color>("white");
+  const [timers, setTimers] = useState<Timers>({ white: (timeControl || 300) * 1000, black: (timeControl || 300) * 1000 });
+  const [gameOver, setGameOver] = useState<GameOverPayload | null>(null);
+  const [drawOfferedBy, setDrawOfferedBy] = useState<Color | null>(null);
+  const [rematchOfferedBy, setRematchOfferedBy] = useState<string | null>(null);
+  const [players, setPlayers] = useState<{ white: RoomPlayer | null; black: RoomPlayer | null }>({ white: null, black: null });
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [status, setStatus] = useState("Waiting for opponent...");
-  const [difficulty, setDifficulty] = useState(null); // non-null ⇒ vs-computer
+  const [difficulty, setDifficulty] = useState<number | null>(null); // non-null ⇒ vs-computer
   const [thinking, setThinking] = useState(false);
-  const [lastMove, setLastMove] = useState(null); // { from, to } | null
+  const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
 
-  const clockRef = useRef(null);
-  const turnRef = useRef("w");
+  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const turnRef = useRef<"w" | "b">("w");
 
   const getBestMove = useStockfish(difficulty !== null, difficulty ?? 3);
 
@@ -56,7 +72,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
 
     socket.emit("join_room", { roomId });
 
-    socket.on("game_start", (data) => {
+    socket.on("game_start", (data: GameStartPayload) => {
       const chess = new Chess(data.fen);
       turnRef.current = chess.turn();
       setGame(chess);
@@ -69,7 +85,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       startClock();
     });
 
-    socket.on("move_made", (data) => {
+    socket.on("move_made", (data: MoveMadePayload) => {
       const chess = new Chess(data.fen);
       turnRef.current = chess.turn();
       setGame(chess);
@@ -80,22 +96,22 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       setLastMove({ from: data.move.from, to: data.move.to });
     });
 
-    socket.on("game_over", (data) => {
+    socket.on("game_over", (data: GameOverPayload) => {
       stopClock();
       setGameOver(data);
       setStatus(`Game Over — ${data.result.toUpperCase()}`);
     });
 
-    socket.on("draw_offered", (data) => setDrawOfferedBy(data.byColor));
+    socket.on("draw_offered", (data: { byColor: Color }) => setDrawOfferedBy(data.byColor));
     socket.on("draw_declined", () => setDrawOfferedBy(null));
 
-    socket.on("opponent_disconnected", (data) => {
+    socket.on("opponent_disconnected", (data: { grace: number }) => {
       setStatus(`Opponent disconnected — ${data.grace / 1000}s to auto-resign`);
     });
 
     socket.on("opponent_reconnected", () => setStatus("Game in progress"));
 
-    socket.on("game_state", (data) => {
+    socket.on("game_state", (data: GameStatePayload) => {
       const chess = new Chess(data.fen);
       turnRef.current = chess.turn();
       setGame(chess);
@@ -109,15 +125,15 @@ export default function ChessGame({ roomId, mode, timeControl }) {
       startClock();
     });
 
-    socket.on("invalid_move", (data) => console.warn("Invalid move:", data.reason));
+    socket.on("invalid_move", (data: { reason: string }) => console.warn("Invalid move:", data.reason));
 
     // Server-authoritative clock correction every 1s (ADR-0004); the local
     // interval only interpolates between these.
-    socket.on("clock_sync", (data) => setTimers(data.timers));
+    socket.on("clock_sync", (data: ClockSyncPayload) => setTimers(data.timers));
 
-    socket.on("rematch_offered", (data) => setRematchOfferedBy(data.byUserId));
+    socket.on("rematch_offered", (data: { byUserId: string }) => setRematchOfferedBy(data.byUserId));
 
-    socket.on("rematch_ready", (data) => navigate(`/game/${data.roomId}`));
+    socket.on("rematch_ready", (data: { roomId: string }) => navigate(`/game/${data.roomId}`));
 
     return () => {
       [
@@ -149,11 +165,11 @@ export default function ChessGame({ roomId, mode, timeControl }) {
   }, [fen, difficulty, socket, roomId, gameOver, getBestMove]);
 
   const isDraggablePiece = useCallback(
-    ({ piece }) => !gameOver && piece.startsWith(orientation === "white" ? "w" : "b"),
+    ({ piece }: { piece: string }) => !gameOver && piece.startsWith(orientation === "white" ? "w" : "b"),
     [gameOver, orientation],
   );
 
-  const onDrop = (sourceSquare, targetSquare) => {
+  const onDrop = (sourceSquare: string, targetSquare: string) => {
     if (!socket || !roomId || gameOver) return false;
     const chess = new Chess(fen === "start" ? undefined : fen);
     const isMyTurn = (chess.turn() === "w" && orientation === "white") ||
@@ -167,7 +183,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
      - last move: inverted-feel overlay (light squares darken, via ink @ 18%)
      - check: pulsing inset ink ring on the checked king's square */
   const squareStyles = useMemo(() => {
-    const styles = {};
+    const styles: Record<string, CSSProperties> = {};
     if (lastMove) {
       styles[lastMove.from] = { boxShadow: "inset 0 0 0 4px #0a0a0a" };
       styles[lastMove.to] = { backgroundColor: "rgba(10,10,10,0.35)", boxShadow: "inset 0 0 0 4px #0a0a0a" };
@@ -215,7 +231,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
     if (socket && roomId) socket.emit("rematch_request", { roomId });
   };
 
-  const formatTime = (ms) => {
+  const formatTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
     return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
   };
@@ -242,7 +258,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
   };
 
   /* Clock chip. Low time (<30s) inverts and blinks — motion, not color. */
-  const Clock = ({ ms }) => (
+  const Clock = ({ ms }: { ms: number }) => (
     <span
       className={`font-mono text-xl font-bold px-3 py-1 border-[3px] border-ink ${
         ms < 30000 && !gameOver
@@ -254,7 +270,7 @@ export default function ChessGame({ roomId, mode, timeControl }) {
     </span>
   );
 
-  const PlayerBar = ({ player, ms, fallback }) => (
+  const PlayerBar = ({ player, ms, fallback }: { player: RoomPlayer | null; ms: number; fallback: string }) => (
     <div className="card-b-flat flex justify-between items-center min-w-[300px] !py-2.5">
       <span className="font-bold uppercase tracking-wider text-sm truncate">
         {player?.username ?? fallback}
@@ -379,8 +395,8 @@ export default function ChessGame({ roomId, mode, timeControl }) {
 
             {gameOver.ratingChange && (
               <div className="flex gap-4 justify-center mb-6">
-                {["white", "black"].map((color) => {
-                  const rc = gameOver.ratingChange[color];
+                {(["white", "black"] as const).map((color) => {
+                  const rc = gameOver.ratingChange![color];
                   const isYou = orientation === color;
                   const up = rc.change >= 0;
                   return (

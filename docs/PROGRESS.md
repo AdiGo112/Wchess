@@ -159,6 +159,7 @@
 
 | # | Increment | Status | Branch | Notes |
 |---|---|---|---|---|
+| 0 | TypeScript migration (foundational, precedes all below) | ✅ | `feature/ts-migration` | All 27 src files JSX/JS → TSX/TS; `strict: true`; shared `src/types.ts` transcribes the socket + REST contracts from `websocket-events.md`/`api-reference.md`; `@types/react` pinned to 18 to match runtime; `tsc --noEmit` added to build gate. tsc + vite build clean, dev-server entry graph transforms with 0 errors |
 | 1 | Zustand stores: auth, game, ui, notification | ❌ | `feature/frontend-ui` | Not started |
 | 2 | React Query hooks: all API hooks | ❌ | `feature/frontend-ui` | Not started |
 | 3 | Sound effects: useSound hook, all game sounds | ❌ | `feature/frontend-ui` | Not started |

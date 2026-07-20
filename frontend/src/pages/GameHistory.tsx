@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api";
+import type { GameRecord } from "../types";
 
 export default function GameHistory() {
   const { user } = useAuth();
-  const [games, setGames] = useState([]);
+  const [games, setGames] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get(`/games/history/${user.id}`)
+    if (!user) return;
+    api.get<{ games: GameRecord[] }>(`/games/history/${user.id}`)
       .then((res) => setGames(res.data.games || []))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -16,21 +18,21 @@ export default function GameHistory() {
 
   /* Strict mono: result reads through glyph + weight, not color.
      ▲ win (bold, inverted chip) / ▼ loss / = draw */
-  const getResult = (game) => {
-    const isWhite = game.whiteId === user.id;
+  const getResult = (game: GameRecord) => {
+    const isWhite = game.whiteId === user?.id;
     const result = game.result?.toLowerCase();
     if (result === "draw") return { glyph: "=", label: "Draw", win: false };
     const won = (result === "white" && isWhite) || (result === "black" && !isWhite);
     return won ? { glyph: "▲", label: "Win", win: true } : { glyph: "▼", label: "Loss", win: false };
   };
 
-  const getRatingChange = (game) => {
-    const isWhite = game.whiteId === user.id;
+  const getRatingChange = (game: GameRecord) => {
+    const isWhite = game.whiteId === user?.id;
     return isWhite ? game.whiteRatingDiff : game.blackRatingDiff;
   };
 
-  const getOpponent = (game) =>
-    game.whiteId === user.id ? game.blackUsername : game.whiteUsername;
+  const getOpponent = (game: GameRecord) =>
+    game.whiteId === user?.id ? game.blackUsername : game.whiteUsername;
 
   return (
     <div className="max-w-4xl mx-auto py-4">

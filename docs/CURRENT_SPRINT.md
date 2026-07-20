@@ -156,6 +156,25 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   (non-player join+disconnect leaves the game untouched after 64s) AND control still works
   (real black player's disconnect → white wins by ABANDONED after 60s).
 
+`feature/ts-migration` — frontend fully on TypeScript. DONE, merged.
+
+- All 27 files under `frontend/src` renamed JSX/JS → TSX/TS (via `git mv`, history
+  preserved) and typed. `tsconfig.json` with `strict: true`, `noEmit`, `react-jsx`.
+- **Contract layer** `src/types.ts`: socket event payloads (`GameStartPayload`,
+  `MoveMadePayload`, `GameOverPayload`, `ClockSyncPayload`, `MatchFoundPayload`, …) and
+  REST responses (`AuthResponse`, `GameRecord`, `LeaderboardRow`, …) transcribed straight
+  from `docs/architecture/websocket-events.md` + `api-reference.md`. Every gateway
+  `socket.on(...)` handler and `api.post<T>` call is now typed against these — a payload
+  mismatch with the NestJS server is a compile error.
+- Order: boundaries first (`api.ts`, both contexts, both hooks), then components, then
+  pages, then the big `ChessGame.tsx` last.
+- **Gotcha fixed:** `@types/react` came in as v19 against React 18 runtime — pinned both
+  `@types/react`/`@types/react-dom` to ^18 so the type major matches the runtime major.
+- `tsc --noEmit` added to the `build` script + a standalone `typecheck` script.
+- Verified: `tsc --noEmit` 0 errors, `vite build` clean (1788 modules), `vite dev`
+  transforms the full entry graph (`index.tsx` → `ChessGame.tsx`) with 0 resolution
+  errors. Pure refactor — no runtime behavior change intended or made.
+
 ## Previously In Progress
 `feature/server-clocks` — ALL FIVE sprint items DONE and live-verified; merged to `dev`.
 

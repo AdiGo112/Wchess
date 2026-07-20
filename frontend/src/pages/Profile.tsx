@@ -1,4 +1,3 @@
-import React from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -11,6 +10,9 @@ export default function Profile() {
     navigate("/login");
   };
 
+  // Route is protected, but the type is User | null — guard once, use freely.
+  if (!user) return null;
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 py-4">
       {/* Profile header */}
@@ -22,7 +24,7 @@ export default function Profile() {
           <h1 className="heading-b text-3xl">{user.name}</h1>
           <p className="font-mono text-sm text-neutral-600">@{user.username}</p>
           <p className="tag-b mt-2">
-            joined {new Date(user.createdAt).toLocaleDateString()}
+            joined {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
           </p>
         </div>
         <button onClick={handleLogout} className="btn-b btn-b-danger ml-auto">

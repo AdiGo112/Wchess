@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import { AxiosError } from "axios";
 import { useAuth } from "../context/AuthContext";
+import type { ApiError } from "../types";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -11,16 +13,17 @@ export default function Login() {
   const location = useLocation();
   const { login } = useAuth();
 
-  const from = location.state?.from?.pathname || "/";
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await login(username, password);
       navigate(from, { replace: true });
-    } catch (err) {
+    } catch (e) {
+      const err = e as AxiosError<ApiError>;
       const code = err.response?.data?.code;
       if (code === "INVALID_CREDENTIALS" || err.response?.status === 401) {
         setError("Invalid username or password.");
