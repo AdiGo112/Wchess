@@ -6,8 +6,8 @@
 import { io } from "socket.io-client";
 import { execSync } from "child_process";
 
-const API = "http://localhost:3000/api/v1";
-const WS = "http://localhost:3000";
+const API = "http://localhost:3100/api/v1";
+const WS = "http://localhost:3100";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });

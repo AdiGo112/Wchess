@@ -143,5 +143,5 @@ npx prisma migrate reset
 | PostgreSQL | 5432 | `postgresql://chess:chess123@localhost:5432/chessweb` |
 | MongoDB | 27017 | `mongodb://localhost:27017/chessweb` |
 | Redis | 6379 | `redis://localhost:6379` |
-| NestJS API | 3000 | `http://localhost:3000` |
+| NestJS API | 3100 | `http://localhost:3100` |
 | React Dev | 5173 | `http://localhost:5173` |

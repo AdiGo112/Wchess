@@ -10,7 +10,7 @@ docker compose up -d
 
 # Terminal 2: Backend
 cd backend
-npm run start:dev     # ts-node-dev with hot reload, port 3000
+npm run start:dev     # ts-node-dev with hot reload, port 3100
 
 # Terminal 3: Frontend
 cd frontend
@@ -44,7 +44,7 @@ Single server, all services co-located:
 ```
 Ubuntu 22.04 VPS (8GB RAM, 4 vCPU)
 ├── Nginx (reverse proxy + SSL termination)
-│   ├── api.chessweb.com  → localhost:3000  (NestJS)
+│   ├── api.chessweb.com  → localhost:3100  (NestJS)
 │   └── chessweb.com      → /var/www/chess/ (React build)
 ├── NestJS API            → PM2 process manager
 └── Docker Compose        → PostgreSQL, MongoDB, Redis
@@ -57,7 +57,7 @@ server {
     server_name api.chessweb.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3100;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";   # required for WebSocket

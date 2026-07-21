@@ -16,7 +16,7 @@ JWT_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_DAYS=30
 
 # ── Server ──────────────────────────────────────────
-PORT=3000
+PORT=3100
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 
@@ -44,7 +44,7 @@ REDIS_URL=redis://localhost:6379
 JWT_SECRET=CHANGE_ME_64_CHARS_MIN
 JWT_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_DAYS=30
-PORT=3000
+PORT=3100
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 SENDGRID_API_KEY=
@@ -58,17 +58,17 @@ STOCKFISH_BINARY_PATH=/usr/local/bin/stockfish
 
 > Implemented 2026-07-19 as ONE origin-only var (not the API/WS pair originally
 > planned): REST and WebSocket share the same backend origin, and `api.js`
-> appends `/api/v1` itself. Optional in dev — defaults to localhost:3000.
+> appends `/api/v1` itself. Optional in dev — defaults to localhost:3100.
 
 ```env
-VITE_SERVER_URL=http://localhost:3000
+VITE_SERVER_URL=http://localhost:3100
 ```
 
 ## frontend/.env.example
 
 ```env
-# Backend origin (no path). Local dev default is http://localhost:3000
-VITE_SERVER_URL=http://localhost:3000
+# Backend origin (no path). Local dev default is http://localhost:3100
+VITE_SERVER_URL=http://localhost:3100
 ```
 
 ---
@@ -83,13 +83,13 @@ VITE_SERVER_URL=http://localhost:3000
 | `JWT_SECRET` | Yes | HS256 signing secret — min 64 chars in production |
 | `JWT_EXPIRES_IN` | Yes | Access token TTL (e.g., `15m`, `1h`) |
 | `REFRESH_TOKEN_EXPIRES_DAYS` | Yes | Refresh token lifetime in days |
-| `PORT` | No | API server port (default: 3000) |
+| `PORT` | No | API server port (default: 3100) |
 | `NODE_ENV` | No | `development` or `production` |
 | `CORS_ORIGIN` | Yes | Allowed origin for CORS |
 | `SENDGRID_API_KEY` | No | Required only for email notifications |
 | `EMAIL_FROM` | No | Sender address for emails |
 | `STOCKFISH_BINARY_PATH` | No | Path to native Stockfish binary (backend analysis) |
-| `VITE_SERVER_URL` | No (frontend; defaults to `http://localhost:3000`) | Backend origin for both REST (`/api/v1` appended in `api.js`) and WebSocket |
+| `VITE_SERVER_URL` | No (frontend; defaults to `http://localhost:3100`) | Backend origin for both REST (`/api/v1` appended in `api.js`) and WebSocket |
 
 ---
 

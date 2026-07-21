@@ -6,8 +6,8 @@
 //     after ~60s, so we know the fix didn't break legitimate abandonment.
 import { io } from "socket.io-client";
 
-const API = "http://localhost:3000/api/v1";
-const WS = "http://localhost:3000";
+const API = "http://localhost:3100/api/v1";
+const WS = "http://localhost:3100";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });

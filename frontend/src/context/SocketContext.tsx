@@ -17,7 +17,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!getToken() || !user) return;
 
-    const socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:3000", {
+    const socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:3100", {
       auth: (cb) => cb({ token: `Bearer ${getToken()}` }),
       transports: ["websocket"],
       reconnectionDelay: 1000,
