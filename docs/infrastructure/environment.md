@@ -85,11 +85,37 @@ VITE_SERVER_URL=http://localhost:3100
 | `REFRESH_TOKEN_EXPIRES_DAYS` | Yes | Refresh token lifetime in days |
 | `PORT` | No | API server port (default: 3100) |
 | `NODE_ENV` | No | `development` or `production` |
-| `CORS_ORIGIN` | Yes | Allowed origin for CORS |
+| `CORS_ORIGIN` | No (default `http://localhost:5173`) | Allowed browser origin(s). `*` = reflect any origin (demo/tunnel); comma-separated = allow-list; parsed by `common/utils/cors.ts`, applied to REST (`main.ts`) and both socket gateways |
 | `SENDGRID_API_KEY` | No | Required only for email notifications |
 | `EMAIL_FROM` | No | Sender address for emails |
 | `STOCKFISH_BINARY_PATH` | No | Path to native Stockfish binary (backend analysis) |
-| `VITE_SERVER_URL` | No (frontend; defaults to `http://localhost:3100`) | Backend origin for both REST (`/api/v1` appended in `api.js`) and WebSocket |
+| `VITE_SERVER_URL` | No (frontend) | Absolute backend origin. **Unset (default) = same-origin**: the frontend calls `/api/v1` and `/socket.io` on its own origin, which the Vite dev proxy (or a prod reverse proxy) forwards to the backend. Set it only to bypass the proxy and hit the backend directly. |
+
+---
+
+## Sharing a live demo without deploying (single-origin + one tunnel)
+
+The frontend is same-origin by default (see `VITE_SERVER_URL` above): `vite.config.js`
+proxies `/api` and `/socket.io` to the backend, so page + REST + WebSocket all ride one
+origin. That means **one tunnel** exposes the whole app.
+
+```bash
+docker compose up -d                 # postgres + redis
+cd backend && npm run start:dev      # :3100
+cd frontend && npm run dev           # :5173 (no --host needed for a tunnel)
+
+# set CORS_ORIGIN=* in backend/.env first (the WS handshake carries the tunnel
+# origin, which is random per session), then expose 5173 with any tunnel:
+cloudflared tunnel --url http://localhost:5173      # zero-account, prints an https URL
+#   or:  npx localtunnel --port 5173
+```
+
+Share the printed `https://…` URL. `allowedHosts: true` in `vite.config.js` lets Vite
+accept the tunnel's random hostname. Revert `CORS_ORIGIN` when done.
+
+**Same-Wi-Fi alternative (no tunnel):** `npm run dev -- --host`, set
+`CORS_ORIGIN=http://<your-LAN-ip>:5173`, open the firewall for 5173/3100, and share
+`http://<your-LAN-ip>:5173`.
 
 ---
 

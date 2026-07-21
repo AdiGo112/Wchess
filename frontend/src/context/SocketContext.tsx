@@ -17,8 +17,12 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!getToken() || !user) return;
 
-    const socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:3100", {
-      auth: (cb) => cb({ token: `Bearer ${getToken()}` }),
+    // Same-origin by default (connects through the Vite/reverse proxy's
+    // /socket.io, so one tunnel covers page + API + WS); VITE_SERVER_URL
+    // overrides to a direct absolute origin.
+    const serverUrl = import.meta.env.VITE_SERVER_URL || window.location.origin;
+    const socket = io(serverUrl, {
+      auth: (cb: (data: { token: string }) => void) => cb({ token: `Bearer ${getToken()}` }),
       transports: ["websocket"],
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
