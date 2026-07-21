@@ -140,6 +140,25 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/leaderboard-polish` — Leaderboard increments 2 + 3. DONE, verified 16/16.
+
+- **Inc 2 (backend):** period-bucketed ZSETs `leaderboard:{week:isoWeek|month:yyyy-mm}:{variant}`,
+  self-expiring via TTL (week 14d / month 62d, re-armed on each write); `updateScore` now
+  writes all-time + current-week + current-month. 60s read-cache (`cache:leaderboard:…`) on
+  the enriched top-N; empty boards uncached so a first game shows immediately. `?period=`
+  on `GET /leaderboard` and `/leaderboard/rank/:id`; invalid period → all-time.
+  **Design note:** live boards ("who's rated-active this week"), NOT start-of-period
+  snapshots — cron-free; variance recorded in `database-schema.md`.
+- **Inc 3 (frontend):** period segmented control under the variant tabs; own-rank row
+  (via `/leaderboard/rank`) shown only when you're outside the top 100, with an
+  "unrated → play a game" prompt when rank is null; "(you)" ring highlight when you're on
+  the visible board.
+- **Verified live 16/16** (`frontend/scripts/verify-leaderboard.mjs`): all/week/month boards
+  carry both players with correct winner>loser>baseline ratings; own-rank per period;
+  unplayed variant → null rank; Redis buckets match the documented key shape; invalid
+  period falls back to all-time.
+
+## Previously In Progress
 `fix/join-room-authz` — security fix from the ts-migration ultrareview. DONE, verified.
 
 - **Non-player join_room + disconnect could forfeit the real black player.** `handleJoinRoom`
