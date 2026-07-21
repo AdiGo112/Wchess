@@ -147,6 +147,13 @@ export interface LeaderboardRow {
   rank: number;
 }
 
+export type LeaderboardPeriod = "all" | "week" | "month";
+
+export interface UserRankResponse {
+  rank: number | null;
+  rating: number | null;
+}
+
 export interface ChallengeCreatedResponse {
   token: string;
   shareUrl: string;

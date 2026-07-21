@@ -16,7 +16,7 @@ JWT_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_DAYS=30
 
 # ── Server ──────────────────────────────────────────
-PORT=3000
+PORT=3100
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 
@@ -44,7 +44,7 @@ REDIS_URL=redis://localhost:6379
 JWT_SECRET=CHANGE_ME_64_CHARS_MIN
 JWT_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_DAYS=30
-PORT=3000
+PORT=3100
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 SENDGRID_API_KEY=
@@ -58,17 +58,17 @@ STOCKFISH_BINARY_PATH=/usr/local/bin/stockfish
 
 > Implemented 2026-07-19 as ONE origin-only var (not the API/WS pair originally
 > planned): REST and WebSocket share the same backend origin, and `api.js`
-> appends `/api/v1` itself. Optional in dev — defaults to localhost:3000.
+> appends `/api/v1` itself. Optional in dev — defaults to localhost:3100.
 
 ```env
-VITE_SERVER_URL=http://localhost:3000
+VITE_SERVER_URL=http://localhost:3100
 ```
 
 ## frontend/.env.example
 
 ```env
-# Backend origin (no path). Local dev default is http://localhost:3000
-VITE_SERVER_URL=http://localhost:3000
+# Backend origin (no path). Local dev default is http://localhost:3100
+VITE_SERVER_URL=http://localhost:3100
 ```
 
 ---
@@ -83,13 +83,49 @@ VITE_SERVER_URL=http://localhost:3000
 | `JWT_SECRET` | Yes | HS256 signing secret — min 64 chars in production |
 | `JWT_EXPIRES_IN` | Yes | Access token TTL (e.g., `15m`, `1h`) |
 | `REFRESH_TOKEN_EXPIRES_DAYS` | Yes | Refresh token lifetime in days |
-| `PORT` | No | API server port (default: 3000) |
+| `PORT` | No | API server port (default: 3100) |
 | `NODE_ENV` | No | `development` or `production` |
-| `CORS_ORIGIN` | Yes | Allowed origin for CORS |
+| `CORS_ORIGIN` | No (default `http://localhost:5173`) | Allowed browser origin(s). `*` = reflect any origin (demo/tunnel); comma-separated = allow-list; parsed by `common/utils/cors.ts`, applied to REST (`main.ts`) and both socket gateways |
 | `SENDGRID_API_KEY` | No | Required only for email notifications |
 | `EMAIL_FROM` | No | Sender address for emails |
 | `STOCKFISH_BINARY_PATH` | No | Path to native Stockfish binary (backend analysis) |
-| `VITE_SERVER_URL` | No (frontend; defaults to `http://localhost:3000`) | Backend origin for both REST (`/api/v1` appended in `api.js`) and WebSocket |
+| `VITE_SERVER_URL` | No (frontend) | Absolute backend origin. **Unset (default) = same-origin**: the frontend calls `/api/v1` and `/socket.io` on its own origin, which the Vite dev proxy (or a prod reverse proxy) forwards to the backend. Set it only to bypass the proxy and hit the backend directly. |
+
+---
+
+## Sharing a live demo without deploying (build once, tunnel one port)
+
+**Do NOT tunnel the Vite dev server** — its hot-reload WebSocket and hundreds of
+on-demand module requests make tunnels return 502s and `wss://localhost:undefined`
+errors. Instead, build the frontend once and let the **backend serve it**
+(`ServeStaticModule` in `app.module.ts` serves `frontend/dist`, with `/api` + `/socket.io`
+excluded so they still route to Nest). Now it's one real server on one port — exactly
+what a tunnel handles well.
+
+```bash
+docker compose up -d                 # postgres + redis
+cd frontend && npm run build         # produces frontend/dist (rebuild after UI changes)
+
+# set CORS_ORIGIN=* in backend/.env (the socket handshake carries the tunnel's
+# random per-session origin), then:
+cd backend && npm run start:dev      # :3100 now serves app + API + WebSocket
+
+# expose ONLY port 3100:
+cloudflared tunnel --url http://localhost:3100     # no account; prints an https URL
+#   or:  npx localtunnel --port 3100
+```
+
+Share the printed `https://…` URL — your friend gets the whole app from your machine.
+Your laptop must stay awake/running (the app lives on it; the tunnel only forwards).
+Revert `CORS_ORIGIN` when done.
+
+> Normal local dev is unchanged: run Vite on `:5173` (`npm run dev`) — its proxy forwards
+> `/api` + `/socket.io` to `:3100`. The backend's static serving of `dist` only matters
+> for this demo/prod single-port mode.
+
+**Same-Wi-Fi alternative (no tunnel):** after `npm run build`, run the backend and share
+`http://<your-LAN-ip>:3100` (find it with `ipconfig`); open the firewall for 3100. Same
+one-port model, no tunnel.
 
 ---
 

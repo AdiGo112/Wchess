@@ -276,13 +276,20 @@ Element: { userId, username, rating, socketId, joinedAt }
 
 ### Leaderboards
 ```
-KEY   leaderboard:bullet        TYPE: ZSET  score=rating  member=userId
-KEY   leaderboard:blitz         TYPE: ZSET
-KEY   leaderboard:rapid         TYPE: ZSET
-KEY   leaderboard:classical     TYPE: ZSET
-KEY   leaderboard:week:blitz    TYPE: ZSET  (weekly snapshot)
-KEY   leaderboard:month:blitz   TYPE: ZSET  (monthly snapshot)
+KEY   leaderboard:{variant}                 TYPE: ZSET  score=rating member=userId  (all-time, no TTL)
+KEY   leaderboard:week:{isoWeek}:{variant}  TYPE: ZSET  TTL 14d   e.g. leaderboard:week:2026-W30:blitz
+KEY   leaderboard:month:{yyyy-mm}:{variant} TYPE: ZSET  TTL 62d   e.g. leaderboard:month:2026-07:blitz
+KEY   cache:leaderboard:{period}:{variant}:{limit}  TYPE: string(JSON) TTL 60s  (enriched top-N)
 ```
+`updateScore` (on every rated game end) ZADDs to all-time + the current week + the
+current month bucket, re-arming each bucket's TTL. Old buckets self-expire — no cron.
+
+**Live boards, not snapshots.** The `docs` originally said "weekly/monthly snapshot"
+(rating *gained* over the period), which needs period-boundary baselines + a cron. These
+buckets instead hold the *current* rating of players who played in the period — the
+Lichess-weekly semantic. Simpler, cron-free, and correct for "who's hot this week."
+The 60s `cache:` entry avoids re-hitting Postgres for usernames on every board load;
+empty boards are never cached (so a first game shows up immediately).
 
 ### Presence & Caching
 ```

@@ -12,16 +12,14 @@ import { Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MatchmakingService } from './matchmaking.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JoinQueueDto, LeaveQueueDto } from './dto/join-queue.dto';
+import { parseCorsOrigin } from '../common/utils/cors';
 
 /**
  * Shares the default Socket.io namespace with GameGateway, which authenticates
  * the handshake and populates `client.data.userId` / `client.data.username`.
  */
 @WebSocketGateway({
-  cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-    credentials: true,
-  },
+  cors: { origin: parseCorsOrigin(), credentials: true },
 })
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {

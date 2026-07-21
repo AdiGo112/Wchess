@@ -80,8 +80,8 @@
 | # | Increment | Status | Branch | Notes |
 |---|---|---|---|---|
 | 1 | Backend Redis: ZADD on game end, ZREVRANGE, enrichment | ✅ | `main` | seedFromDatabase(), top-100 working |
-| 2 | Backend time-scoped boards + 60s cache | ❌ | `feature/leaderboard` | Not started |
-| 3 | Frontend: variant tabs, period filter, own rank row | ⏳ | `feature/leaderboard` | Basic page exists; no tabs or filter |
+| 2 | Backend time-scoped boards + 60s cache | ✅ | `feature/leaderboard-polish` | Period-bucketed ZSETs `leaderboard:{week:isoWeek\|month:yyyy-mm}:{variant}`, self-expiring via TTL (week 14d / month 62d, re-armed on write); `updateScore` writes all-time+week+month; 60s read-cache on the enriched top-N (empty results uncached). **Live boards, not start-of-period snapshots** — documented variance. `?period=all\|week\|month` on both endpoints |
+| 3 | Frontend: variant tabs, period filter, own rank row | ✅ | `feature/leaderboard-polish` | Period segmented control added under the variant tabs; own-rank row (via `/leaderboard/rank/:id?period=`) shown only when you're outside the top 100, with an "unrated → play a game" prompt when rank is null; "(you)" highlight ring on your row when visible. 16/16 live e2e (`frontend/scripts/verify-leaderboard.mjs`) |
 
 ---
 

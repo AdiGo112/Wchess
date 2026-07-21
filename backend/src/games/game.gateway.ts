@@ -13,13 +13,14 @@ import { Chess } from 'chess.js';
 import { JwtService } from '@nestjs/jwt';
 import { GamesService, ActiveRoom, CLOCK_GRACE_MS } from './games.service';
 import { RedisService } from '../common/redis/redis.service';
+import { parseCorsOrigin } from '../common/utils/cors';
 
 /** How many times a handler re-runs itself after losing a CAS race. */
 const CAS_RETRIES = 3;
 const SWEEP_INTERVAL_MS = 1000;
 
 @WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true },
+  cors: { origin: parseCorsOrigin(), credentials: true },
   namespace: '/',
 })
 export class GameGateway
