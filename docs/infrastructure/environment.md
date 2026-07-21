@@ -93,29 +93,39 @@ VITE_SERVER_URL=http://localhost:3100
 
 ---
 
-## Sharing a live demo without deploying (single-origin + one tunnel)
+## Sharing a live demo without deploying (build once, tunnel one port)
 
-The frontend is same-origin by default (see `VITE_SERVER_URL` above): `vite.config.js`
-proxies `/api` and `/socket.io` to the backend, so page + REST + WebSocket all ride one
-origin. That means **one tunnel** exposes the whole app.
+**Do NOT tunnel the Vite dev server** — its hot-reload WebSocket and hundreds of
+on-demand module requests make tunnels return 502s and `wss://localhost:undefined`
+errors. Instead, build the frontend once and let the **backend serve it**
+(`ServeStaticModule` in `app.module.ts` serves `frontend/dist`, with `/api` + `/socket.io`
+excluded so they still route to Nest). Now it's one real server on one port — exactly
+what a tunnel handles well.
 
 ```bash
 docker compose up -d                 # postgres + redis
-cd backend && npm run start:dev      # :3100
-cd frontend && npm run dev           # :5173 (no --host needed for a tunnel)
+cd frontend && npm run build         # produces frontend/dist (rebuild after UI changes)
 
-# set CORS_ORIGIN=* in backend/.env first (the WS handshake carries the tunnel
-# origin, which is random per session), then expose 5173 with any tunnel:
-cloudflared tunnel --url http://localhost:5173      # zero-account, prints an https URL
-#   or:  npx localtunnel --port 5173
+# set CORS_ORIGIN=* in backend/.env (the socket handshake carries the tunnel's
+# random per-session origin), then:
+cd backend && npm run start:dev      # :3100 now serves app + API + WebSocket
+
+# expose ONLY port 3100:
+cloudflared tunnel --url http://localhost:3100     # no account; prints an https URL
+#   or:  npx localtunnel --port 3100
 ```
 
-Share the printed `https://…` URL. `allowedHosts: true` in `vite.config.js` lets Vite
-accept the tunnel's random hostname. Revert `CORS_ORIGIN` when done.
+Share the printed `https://…` URL — your friend gets the whole app from your machine.
+Your laptop must stay awake/running (the app lives on it; the tunnel only forwards).
+Revert `CORS_ORIGIN` when done.
 
-**Same-Wi-Fi alternative (no tunnel):** `npm run dev -- --host`, set
-`CORS_ORIGIN=http://<your-LAN-ip>:5173`, open the firewall for 5173/3100, and share
-`http://<your-LAN-ip>:5173`.
+> Normal local dev is unchanged: run Vite on `:5173` (`npm run dev`) — its proxy forwards
+> `/api` + `/socket.io` to `:3100`. The backend's static serving of `dist` only matters
+> for this demo/prod single-port mode.
+
+**Same-Wi-Fi alternative (no tunnel):** after `npm run build`, run the backend and share
+`http://<your-LAN-ip>:3100` (find it with `ipconfig`); open the firewall for 3100. Same
+one-port model, no tunnel.
 
 ---
 
