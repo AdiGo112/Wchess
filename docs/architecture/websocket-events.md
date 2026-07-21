@@ -1,10 +1,10 @@
 # WebSocket Events
 
-Socket.io connection at `ws://localhost:3000`
+Socket.io connection at `ws://localhost:3100`
 
 **Authentication:** Pass JWT in handshake:
 ```typescript
-const socket = io('http://localhost:3000', {
+const socket = io('http://localhost:3100', {
   auth: { token: `Bearer ${accessToken}` }
 });
 ```

@@ -18,7 +18,7 @@
 All modules live inside one NestJS app at `backend/src/`:
 
 ```
-NestJS App (port 3000)
+NestJS App (port 3100)
 ├── AuthModule          — register, login, JWT
 ├── UsersModule         — profile, stats
 ├── GamesModule         — game history, GameGateway (Socket.io)

@@ -1,7 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+// Same-origin by default: "/api/v1" is served through the Vite proxy (dev) or
+// your reverse proxy (prod), so no CORS and no host to configure. Set
+// VITE_SERVER_URL to an absolute origin to hit the backend directly instead.
 const api = axios.create({
-  baseURL: `${import.meta.env.VITE_SERVER_URL || "http://localhost:3000"}/api/v1`,
+  baseURL: `${import.meta.env.VITE_SERVER_URL || ""}/api/v1`,
   headers: { "Content-Type": "application/json" },
 });
 
