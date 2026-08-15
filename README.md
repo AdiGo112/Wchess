@@ -1,8 +1,14 @@
-# ChessWeb
+# WChess
 
-Production-grade chess platform. React + NestJS + PostgreSQL + MongoDB + Redis + Socket.io + BullMQ + Stockfish.
+A server-authoritative, real-time web chess platform with an in-browser AI
+opponent and confidence-based (Glicko-2) ratings.
 
-> **Status:** Active rebuild. See `Here_is_THE_plan.md` for the masterplan and the `plan` branch `docs/` folder for feature specs.
+React + TypeScript · NestJS · PostgreSQL · Redis · Socket.io · Stockfish WASM
+
+> **Status:** v1 core is working end to end — live rated games, server clocks,
+> matchmaking, a Stockfish opponent, and leaderboards. Scope was deliberately cut
+> to that core by **ADR-0032**; see `docs/FUTURE_SCOPE.md` for what's deferred and
+> `docs/CURRENT_SPRINT.md` for what's happening now.
 
 ---
 
@@ -10,14 +16,17 @@ Production-grade chess platform. React + NestJS + PostgreSQL + MongoDB + Redis +
 
 | Layer | Technology |
 |---|---|
-| Frontend | React (Vite), react-chessboard, chess.js, Zustand, React Query, Socket.io client |
-| Backend | NestJS (TypeScript), Passport-JWT, class-validator, Swagger |
-| Relational DB | PostgreSQL 16 via Prisma ORM |
-| Document DB | MongoDB 7 via Mongoose |
-| Cache / Queues | Redis 7 via ioredis + BullMQ |
-| Real-time | Socket.io with @socket.io/redis-adapter |
-| Engine | Stockfish (WASM Web Worker in browser; native binary for analysis) |
-| Infrastructure | Docker Compose (local), PM2 (VPS), Kubernetes (scale) |
+| Frontend | React 18 + TypeScript (strict), Vite, Tailwind, react-chessboard, chess.js, Socket.io client |
+| Backend | NestJS (TypeScript), Passport-JWT, class-validator, Swagger, Prisma |
+| Database | PostgreSQL 16 via Prisma ORM |
+| Cache / real-time state | Redis 7 via ioredis (game rooms, queues, leaderboards, clock deadlines) |
+| Real-time | Socket.io (single default namespace) |
+| Engine | Stockfish 18 lite, WASM in a browser Web Worker (ADR-0009) |
+| Infrastructure | Docker Compose (PostgreSQL + Redis) |
+
+MongoDB and BullMQ were **removed** in the v1 scope cut — deleting chat and
+notifications removed the only Mongo consumers, and the client-side engine
+removed the only queue consumer. Neither is a dependency any more.
 
 ---
 
@@ -29,72 +38,90 @@ Production-grade chess platform. React + NestJS + PostgreSQL + MongoDB + Redis +
 
 ### 1. Start databases
 ```bash
-docker compose up -d
+docker compose up -d            # PostgreSQL :5432 + Redis :6379
 ```
 
 ### 2. Backend
 ```bash
 cd backend
-cp .env.example .env          # fill in secrets
+cp .env.example .env            # fill in secrets
 npm install
-npx prisma migrate dev        # creates PostgreSQL tables
-npm run start:dev             # http://localhost:3000
+npx prisma migrate dev          # creates PostgreSQL tables
+npm run start:dev               # http://localhost:3100
 ```
 
 ### 3. Frontend
 ```bash
 cd frontend
 npm install
-npm run dev                   # http://localhost:5173
+npm run dev                     # http://localhost:5173
 ```
 
+The frontend proxies `/api` and `/socket.io` to the backend, so it runs
+same-origin with no CORS setup. Set `VITE_SERVER_URL` only if you want to point
+it at a different backend origin.
+
+**One-port demo:** `npm run build` in `frontend/`, then start the backend — it
+serves the built SPA, so the whole app is on `:3100` alone.
+
 ### API docs
-Swagger UI at `http://localhost:3000/api/docs` in development.
+Swagger UI at `http://localhost:3100/api/docs`.
+
+### Verification scripts
+Each feature ships a runnable live end-to-end check (no test framework):
+```bash
+node frontend/scripts/verify-clocks.mjs        # server clocks, 8/8
+node frontend/scripts/verify-leaderboard.mjs   # period boards, 16/16
+node frontend/scripts/verify-join-authz.mjs    # join_room authz, 2/2
+node frontend/scripts/verify-hardening.mjs     # pre-Inc-2 hardening pass
+```
 
 ---
 
 ## Architecture
 
 ```
-ChessWeb/
-├── docker-compose.yml          — PostgreSQL + MongoDB + Redis
-├── frontend/                   — React (Vite)
+WChess/
+├── docker-compose.yml          — PostgreSQL + Redis
+├── frontend/                   — React + TypeScript (Vite)
+│   ├── scripts/                — live end-to-end verification scripts
 │   └── src/
 │       ├── pages/
 │       ├── components/
-│       ├── store/              — Zustand stores
-│       ├── api/                — React Query hooks
-│       └── workers/            — Stockfish Web Worker
+│       ├── context/            — AuthContext, SocketContext
+│       ├── hooks/              — useStockfish, useMatchmakingSocket
+│       ├── utils/
+│       ├── api.ts              — axios client + refresh interceptors
+│       └── types.ts            — socket + REST contracts
 └── backend/                    — NestJS
     ├── prisma/schema.prisma    — PostgreSQL models
     └── src/
-        ├── auth/               — JWT register/login/refresh
-        ├── games/              — game lifecycle + Socket.io gateway
-        ├── matchmaking/        — BullMQ queue pairing
-        ├── stockfish/          — BullMQ analysis worker
-        ├── chat/               — MongoDB messages + gateway
-        ├── notifications/      — MongoDB + BullMQ email
-        ├── leaderboard/        — Redis sorted sets
-        ├── tournaments/        — Swiss/Arena/RoundRobin/KO
-        ├── puzzles/            — Lichess puzzle bank + spaced repetition
-        └── social/             — friends, follows, activity feed
+        ├── auth/               — JWT register/login/refresh/logout
+        ├── games/              — game lifecycle + Socket.io gateway + clocks
+        ├── matchmaking/        — Redis queue pairing, challenges, vs-computer
+        ├── leaderboard/        — Redis sorted sets (all / week / month)
+        ├── users/              — profiles, stats, player directory
+        └── common/             — Prisma, Redis, Glicko-2, CORS helpers
 ```
 
 ---
 
-## Features
+## Features (built)
 
-- Real-time multiplayer chess (WebSockets, Redis game rooms)
+- Real-time multiplayer chess — server-authoritative, Redis game rooms, Lua CAS on every mutation
+- Server-side clocks with a 1s Redis ZSET deadline sweeper (ADR-0004)
 - Glicko-2 ratings per variant (Bullet / Blitz / Rapid / Classical)
-- Matchmaking queue with rating-tolerance relaxation
-- Computer opponent (Stockfish, 5 difficulty levels)
-- Post-game computer analysis with move classification
-- Leaderboards (live, weekly, monthly) via Redis sorted sets
-- Tournaments: Swiss, Arena, Round Robin, Knockout
-- Puzzles with spaced repetition and Glicko-2 puzzle ratings
-- In-game chat (MongoDB), real-time notifications (Socket.io + email)
-- Friend system, follow graph, online presence, activity feed
-- Dark/light themes, board themes, sound effects
+- Matchmaking queue with rating-tolerance relaxation (±50 → ±400, ADR-0008)
+- Friend challenges via tokened links, and vs-computer games
+- Computer opponent — Stockfish WASM in the player's own browser, 5 difficulties (ADR-0009)
+- Leaderboards (all-time / weekly / monthly) via Redis sorted sets, 60s read cache
+- Game history with PGN export
+- Monochrome neo-brutalist UI
+
+## Deferred (ADR-0032)
+
+Post-game analysis, tournaments, puzzles, social graph, chat, notifications.
+See `docs/FUTURE_SCOPE.md`.
 
 ---
 
@@ -103,20 +130,8 @@ ChessWeb/
 | Branch | Purpose |
 |---|---|
 | `main` | Stable, deployable code |
-| `plan` | Architecture docs (`docs/`) — no executable code |
-| `feature/*` | One branch per feature, merged to main when complete |
+| `staging` | Pre-release integration |
+| `dev` | Integration branch — features merge here first |
+| `feature/*` | One branch per feature, cut from `dev` |
 
-## Implementation Order
-
-1. `feature/auth` — JWT register/login/refresh/me
-2. `feature/game-engine` — live chess, Redis rooms, Glicko-2
-3. `feature/matchmaking` — queue pairing, BullMQ
-4. `feature/stockfish` — WASM browser worker + backend analysis
-5. `feature/leaderboard` — Redis sorted sets
-6. `feature/chat` — MongoDB messages, Socket.io
-7. `feature/tournaments` — Swiss/Arena/RR/KO
-8. `feature/puzzles` — Lichess import, spaced repetition
-9. `feature/social` — friends, follows, activity feed
-10. `feature/notifications` — socket delivery, email via BullMQ
-11. `feature/analysis` — depth-18 eval, move classification
-12. `feature/frontend-ui` — Zustand, React Query, polish
+Never commit directly to `main` or `staging`.

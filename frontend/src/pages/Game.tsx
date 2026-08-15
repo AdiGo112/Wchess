@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ChessGame from "../components/ChessGame";
 
@@ -14,7 +14,11 @@ export default function Game() {
   const { roomId: routeRoomId } = useParams<{ roomId: string }>();
 
   const state = (location.state || {}) as GameLocationState;
-  const [roomId] = useState(routeRoomId || state.roomId);
+  // Derived, NOT state: a rematch navigates to /game/<newRoomId>, which reuses
+  // this same component instance. Freezing roomId in useState left the board
+  // wired to the finished game. ChessGame is keyed on it so a new room drops
+  // all board state rather than trying to reconcile it.
+  const roomId = routeRoomId || state.roomId;
   const { mode, timeControl } = state;
 
   // Matchmaking now lives in the Lobby; the game page only renders a known room.
@@ -45,7 +49,7 @@ export default function Game() {
 
       <div className="flex-1 flex items-center justify-center p-6 bg-paper">
         {roomId ? (
-          <ChessGame roomId={roomId} mode={mode} timeControl={timeControl} />
+          <ChessGame key={roomId} roomId={roomId} mode={mode} timeControl={timeControl} />
         ) : (
           <div className="text-center">
             <div className="loader-b mx-auto mb-4" />

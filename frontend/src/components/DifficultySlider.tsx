@@ -23,6 +23,8 @@ export default function DifficultySlider({ value, onChange }: DifficultySliderPr
             type="button"
             onClick={() => onChange(lvl)}
             title={label}
+            aria-pressed={active}
+            aria-label={`Difficulty ${lvl} — ${label}`}
             className={`flex-1 flex flex-col items-center py-2 transition-colors ${
               active ? "bg-ink text-white" : "bg-white hover:bg-neutral-200"
             }`}

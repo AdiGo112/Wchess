@@ -5,21 +5,34 @@ Swagger UI: `http://localhost:3100/api/docs`
 
 All protected routes require: `Authorization: Bearer <accessToken>`
 
+> **Scope.** This file documents the endpoints that exist in `backend/src` today.
+> Chat, notifications, puzzles, tournaments, social, analysis and media were cut
+> from v1 by ADR-0032 and their modules deleted — their endpoint tables have been
+> removed from this file rather than left looking live. See `docs/FUTURE_SCOPE.md`
+> for what returns and when.
+
 ---
 
 ## Auth
 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
-| POST | `/auth/register` | — | `{ username, email, password, name }` | `{ accessToken, refreshToken, user }` |
+| POST | `/auth/register` | — | `{ username, email, password, name }` | `{ user }` |
 | POST | `/auth/login` | — | `{ username, password }` | `{ accessToken, refreshToken, user }` |
 | POST | `/auth/refresh` | — | `{ refreshToken }` | `{ accessToken, refreshToken }` |
-| POST | `/auth/logout` | ✓ | — | `204` |
+| POST | `/auth/logout` | — | `{ refreshToken }` | `204` |
 | GET | `/auth/me` | ✓ | — | `UserDto` |
-| POST | `/auth/forgot-password` | — | `{ email }` | `204` |
-| POST | `/auth/reset-password` | — | `{ token, newPassword }` | `204` |
 
-**Error codes:** AUTH_001–AUTH_007 (see `Here_is_THE_plan.md §43`)
+`/auth/logout` is deliberately unguarded: it is idempotent and identifies the
+session by the refresh token in the body, so an expired access token can still
+log you out.
+
+**`UserDto`** — identity only: `{ id, username, email, name, role, avatarUrl, createdAt }`.
+It carries no ratings or W/L; use `/users/:username/stats` for those.
+
+Refresh tokens are stored as SHA-256 hashes, rotate on every use, and expire
+after `REFRESH_TOKEN_EXPIRES_DAYS` (default 30). Expired rows are swept on the
+owner's next login and on logout — there is no scheduled job.
 
 ---
 
@@ -27,10 +40,10 @@ All protected routes require: `Authorization: Bearer <accessToken>`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/users/:username` | — | Public profile |
-| PATCH | `/users/me` | ✓ | Update own profile `{ name, bio, country }` |
-| GET | `/users/:username/stats` | — | Wins, losses, draws, rating history |
-| GET | `/users/search?q=` | — | Search by username |
+| GET | `/users` | — | Player directory `?page=1&limit=25&search=` → `{ players, total, page, limit }`. Each row is `{ id, username, name, createdAt, rating }`, where `rating` is the player's highest across variants (`null` if never rated). `limit` is capped at 50. |
+| GET | `/users/:username` | — | Public profile (never returns `passwordHash` or `email`) |
+| GET | `/users/:username/stats` | — | `{ userId, username, ratings[], totalGames }`. Each `ratings[]` row is one variant: `{ variant, rating, ratingDeviation, wins, losses, draws, provisional }` |
+| PATCH | `/users/me` | ✓ | Update own profile `{ name?, bio?, country? }` (max 50 / 300 / 2 chars) |
 
 ---
 
@@ -38,25 +51,38 @@ All protected routes require: `Authorization: Bearer <accessToken>`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/games/:id` | — | Single game by ID |
-| GET | `/games/history/:userId` | ✓ | Paginated game history `?page=1&limit=20&variant=blitz` |
-| POST | `/games/challenge` | ✓ | Challenge a user `{ targetUsername, timeControl, variant }` |
-| GET | `/games/live` | — | Currently active public games |
+| GET | `/games/:id` | — | Single completed game by ID. Live games live in Redis and are not exposed here. |
+| GET | `/games/history/:userId` | ✓ | Paginated history `?page=1&limit=20` (limit capped at 50) → `{ games, total, page, limit }` |
+
+`GET /games/history/:userId` requires auth. It was unguarded until the
+pre-Increment-2 hardening pass, which let anyone walk username → id → full
+history without logging in.
+
+Each `games[]` row includes `pgn` — a standard PGN with `Event`/`Site`/`Date`/
+`White`/`Black`/`WhiteElo`/`BlackElo`/`TimeControl`/`Result` tags, written at
+game end.
 
 ---
 
 ## Matchmaking
 
-All paths are under the global prefix `/api/v1`. Implemented in feature 03 Inc 2.
-
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/matchmaking/challenge` | ✓ | Create friend-challenge link. Body `{ variant, timeControl, increment?, creatorColor? }` → `{ token, shareUrl, expiresAt }` (TTL 10 min) |
-| POST | `/matchmaking/challenge/:token/accept` | ✓ | Accept a challenge → `{ gameId, color }`. Creator notified via `challenge_accepted` socket event. Errors: 404 `CHALLENGE_NOT_FOUND` / `CHALLENGE_EXPIRED`, 409 `CHALLENGE_ALREADY_ACCEPTED`, 403 `CANNOT_ACCEPT_OWN_CHALLENGE` |
-| POST | `/matchmaking/computer` | ✓ | Create vs-computer game immediately. Body `{ difficulty (1-5), variant, timeControl, increment? }` → `{ gameId }`. Black player is the `computer` engine; `difficulty` stored on the Redis room |
+| POST | `/matchmaking/challenge` | ✓ | Create friend-challenge link. Body `{ timeControl, increment?, creatorColor? }` → `{ token, shareUrl, expiresAt }` (TTL 10 min) |
+| POST | `/matchmaking/challenge/:token/accept` | ✓ | Accept a challenge → `{ gameId, color, timeControl }`. Creator notified via `challenge_accepted` socket event. Errors: 404 `CHALLENGE_NOT_FOUND` / `CHALLENGE_EXPIRED`, 409 `CHALLENGE_ALREADY_ACCEPTED`, 403 `CANNOT_ACCEPT_OWN_CHALLENGE` |
+| POST | `/matchmaking/computer` | ✓ | Create vs-computer game immediately. Body `{ difficulty (1-5), timeControl, increment? }` → `{ gameId }`. Black is the `computer` engine; `difficulty` is stored on the Redis room |
 | GET | `/matchmaking/queue-status` | ✓ | Whether caller is queued → `{ inQueue, variant, timeControl, position }` |
 
-> Quick-match queueing is over Socket.io (`join_queue` / `leave_queue` / `match_found`), not REST — see `websocket-events.md`.
+**No `variant` in any request body.** The server always derives it from
+`timeControl` (`variantFromTimeControl`) so a client can't request one variant
+and be rated under another. A `variant` field sent anyway is silently stripped
+by the global `ValidationPipe` (`whitelist: true`).
+
+`shareUrl` is built from `FRONTEND_URL`, falling back to `CORS_ORIGIN`, then
+`http://localhost:5173`.
+
+> Quick-match queueing is over Socket.io (`join_queue` / `leave_queue` /
+> `match_found`), not REST — see `websocket-events.md`.
 
 ---
 
@@ -64,88 +90,14 @@ All paths are under the global prefix `/api/v1`. Implemented in feature 03 Inc 2
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/leaderboard` | — | Top 100 `?variant=blitz&period=all\|week\|month` |
-| GET | `/leaderboard/rank/:userId` | — | A user's rank and rating |
+| GET | `/leaderboard` | — | `?variant=blitz&period=all\|week\|month&limit=100` (capped at 200). Returns a bare array of `{ userId, rating, rank, username, name, avatarUrl }`. Unknown `period` falls back to `all`. |
+| GET | `/leaderboard/rank/:userId` | — | `?variant=blitz&period=...` → `{ rank, rating }`, both `null` if the player is unrated in that variant |
 
----
-
-## Tournaments
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/tournaments` | — | List `?status=upcoming\|ongoing\|completed&type=swiss` |
-| POST | `/tournaments` | ✓ ADMIN | Create `{ name, format, variant, timeControl, startAt, rounds }` |
-| GET | `/tournaments/:id` | — | Tournament detail |
-| POST | `/tournaments/:id/join` | ✓ | Join tournament |
-| POST | `/tournaments/:id/leave` | ✓ | Leave tournament |
-| GET | `/tournaments/:id/standings` | — | Current standings |
-| GET | `/tournaments/:id/rounds/:num` | — | Pairings for a round |
-
----
-
-## Puzzles
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/puzzles/daily` | — | Today's daily puzzle |
-| GET | `/puzzles/next` | ✓ | Next spaced-repetition puzzle for user |
-| GET | `/puzzles/:id` | — | Single puzzle |
-| POST | `/puzzles/:id/attempt` | ✓ | Submit attempt `{ moves: string[] }` |
-| GET | `/puzzles/themes` | — | All available themes |
-| GET | `/puzzles?theme=fork&rating=1500` | — | Filter puzzles |
-
----
-
-## Social
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/friends` | ✓ | My friends list |
-| GET | `/friends/requests/pending` | ✓ | Incoming requests |
-| POST | `/friends/request/:userId` | ✓ | Send friend request |
-| POST | `/friends/accept/:requestId` | ✓ | Accept request |
-| POST | `/friends/decline/:requestId` | ✓ | Decline request |
-| DELETE | `/friends/:friendId` | ✓ | Remove friend |
-| POST | `/follow/:userId` | ✓ | Follow user |
-| DELETE | `/follow/:userId` | ✓ | Unfollow |
-| GET | `/activity-feed` | ✓ | My activity feed |
-
----
-
-## Notifications
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/notifications` | ✓ | My notifications `?unread=true&limit=20` |
-| PATCH | `/notifications/:id/read` | ✓ | Mark as read |
-| PATCH | `/notifications/read-all` | ✓ | Mark all as read |
-
----
-
-## Chat
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/chat/rooms/:roomId/history` | ✓ | Message history `?before={cursor}&limit=50` |
-
----
-
-## Analysis
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/analysis/game/:gameId` | ✓ | Request full game analysis → `{ jobId }` |
-| GET | `/analysis/game/:gameId` | ✓ | Get analysis result (or 202 if pending) |
-| POST | `/analysis/position` | ✓ | Evaluate position `{ fen, depth, multipv }` |
-
----
-
-## Media
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/media/avatar` | ✓ | Upload avatar (multipart, max 2MB jpg/png/webp) → `{ url }` |
-| DELETE | `/media/avatar` | ✓ | Remove avatar |
+Boards are Redis sorted sets. Week/month buckets are **live** boards — the
+current rating of players active in that period, not a start-of-period snapshot.
+They self-expire (14 / 62 days, re-armed on each write). Enriched top-N reads are
+cached for 60s. On boot the service reseeds from Postgres if the all-time boards
+are empty, so a Redis flush is recoverable.
 
 ---
 

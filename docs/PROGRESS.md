@@ -177,7 +177,7 @@
 | Game Engine | 3 | 3 | 100% |
 | Matchmaking | 3 | 3 | 100% |
 | Stockfish | 2 | 3 | 67% |
-| Leaderboard | 1 | 3 | 33% |
+| Leaderboard | 3 | 3 | 100% |
 | Chat | 0 | 3 | 0% |
 | Tournaments | 0 | 6 | 0% |
 | Puzzles | 0 | 5 | 0% |
@@ -185,4 +185,19 @@
 | Notifications | 0 | 4 | 0% |
 | Analysis | 0 | 5 | 0% |
 | Frontend UI | 0 | 6 | 0% |
-| **Total** | **9** | **51** | **18%** |
+| **Total** | **11** | **51** | **22%** |
+
+Leaderboard Inc 2 + 3 shipped in `8e1a6d6` but this table still read 1/3 until
+2026-08-16.
+
+---
+
+## Cross-cutting work (not increment-shaped)
+
+| Item | Status | Branch | Notes |
+|---|---|---|---|
+| Server clocks + room CAS + $transaction + throttler + env URLs | ✅ | `feature/server-clocks` | First-sprint blockers from ADR-0032; 8/8 live |
+| TypeScript migration (frontend) | ✅ | `feature/ts-migration` | All 27 files → `.ts`/`.tsx`, strict, contracts in `types.ts` |
+| `join_room` authz fix | ✅ | `fix/join-room-authz` | Non-player disconnect could forfeit the real black player; 2/2 live |
+| Port 3000 → 3100, single-origin proxy, serve-static | ✅ | `dev` | `ad5c38a`, `8ea141f`, `dd7a1a4` — merged in `81c78e1`, unlogged until 2026-08-16 |
+| **Pre-Increment-2 hardening pass** | ✅ | `feature/pre-inc2-hardening` | ~30 defects: unauthenticated game history, non-player clock start, dead rematch, no room re-join on reconnect, round-trip-bound moves, rejected promotions, Profile showing 0/0/0, `/players` + `/profile/edit` blank pages, serial Redis on game end, unread `REFRESH_TOKEN_EXPIRES_DAYS`, unpruned refresh tokens, empty `Game.pgn`, redundant indexes, and the live docs. **19/19 live** (`verify-hardening.mjs`), migration `drop_redundant_indexes` applied, both builds clean. Running it also exposed a Nest module-init ordering bug in the new leaderboard seed (`2d792a1`). See `docs/CURRENT_SPRINT.md`. |

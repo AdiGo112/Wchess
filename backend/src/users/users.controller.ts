@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +14,16 @@ export class UpdateProfileDto {
 @Controller('users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
+
+  // Declared before ':username' so the literal path wins the route match.
+  @Get()
+  list(
+    @Query('page') page = '1',
+    @Query('limit') limit = '25',
+    @Query('search') search?: string,
+  ) {
+    return this.usersService.listUsers(+page, +limit, search);
+  }
 
   @Get(':username')
   getProfile(@Param('username') username: string) {

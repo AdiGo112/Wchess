@@ -37,6 +37,8 @@ export default function VariantSelector({ selected, onSelect }: VariantSelectorP
             key={presetKey(p)}
             type="button"
             onClick={() => onSelect(p)}
+            aria-pressed={!!active}
+            aria-label={`${p.label} ${p.name}`}
             className={`flex flex-col items-center px-2 py-2 border-[3px] border-ink transition-all ${
               active
                 ? "bg-ink text-white shadow-brutal-sm"

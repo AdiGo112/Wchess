@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import toast from "react-hot-toast";
 import { useAuth } from "./AuthContext";
 
 interface SocketContextValue {
@@ -10,9 +11,11 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue | null>(null);
 
 export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, getToken } = useAuth();
+  const { user, getToken, refreshToken } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  // One token refresh per disconnected stretch — reset on a successful connect.
+  const refreshedRef = useRef(false);
 
   useEffect(() => {
     if (!getToken() || !user) return;
@@ -28,13 +31,43 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       reconnectionAttempts: 5,
     });
 
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      refreshedRef.current = false;
+      toast.dismiss("socket-dead");
+    });
     socket.on("disconnect", () => setConnected(false));
-    socket.on("connect_error", (err) => console.error("Socket error:", err.message));
+
+    // The handshake is rejected outright when the access token has expired
+    // (GameGateway.handleConnection verifies it), so every retry would fail
+    // identically. Refresh once, then let socket.io's own backoff continue.
+    socket.on("connect_error", async (err) => {
+      console.error("Socket error:", err.message);
+      if (refreshedRef.current) return;
+      refreshedRef.current = true;
+      await refreshToken();
+    });
+
+    // socket.io stops retrying after `reconnectionAttempts`. Without this the
+    // player is left in a frozen game with no indication anything is wrong.
+    socket.io.on("reconnect_failed", () => {
+      toast.error("Connection lost. Reload the page to continue.", {
+        duration: Infinity,
+        id: "socket-dead",
+      });
+    });
+
+    // Gateways report failures over a plain `error` event (Room not found,
+    // Not authenticated, ALREADY_IN_QUEUE). Nothing listened for it, so every
+    // one of them was silent.
+    socket.on("error", (data: { code?: string; message?: string }) => {
+      if (data?.message) toast.error(data.message);
+    });
 
     socketRef.current = socket;
 
     return () => {
+      socket.io.off("reconnect_failed");
       socket.disconnect();
       socketRef.current = null;
       setConnected(false);

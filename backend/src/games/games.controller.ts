@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { GamesService } from './games.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -9,6 +9,8 @@ export class GamesController {
   constructor(private gamesService: GamesService) {}
 
   @Get('history/:userId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   getHistory(
     @Param('userId') userId: string,
     @Query('page') page = '1',
