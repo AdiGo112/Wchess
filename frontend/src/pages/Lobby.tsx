@@ -15,7 +15,7 @@ function fmt(seconds: number) {
 }
 
 const Card = ({ index, title, children }: { index: number; title: string; children: ReactNode }) => (
-  <div className="flex-1 min-w-[280px] card-b">
+  <div className="flex-1 min-w-[min(280px,100%)] card-b">
     <div className="flex items-baseline gap-2 mb-5">
       <span className="font-display text-neutral-300 text-3xl leading-none select-none">
         {String(index).padStart(2, "0")}
@@ -140,6 +140,7 @@ export default function Lobby() {
                   onClick={copyLink}
                   className="bg-ink text-white px-3 hover:bg-neutral-700 transition-colors"
                   title="Copy"
+                  aria-label="Copy challenge link"
                 >
                   <Copy size={16} />
                 </button>

@@ -9,15 +9,20 @@
 
 ```bash
 docker compose up -d                        # PostgreSQL :5432 + Redis :6379  (Mongo removed 2026-07-19)
-cd backend && npm run start:dev             # NestJS API :3000, Swagger :3000/api/docs
-cd frontend && npm run dev                  # React :5173
+cd backend && npm run start:dev             # NestJS API :3100, Swagger :3100/api/docs
+cd frontend && npm run dev                  # React :5173 (proxies /api + /socket.io to :3100)
 ```
 
 First time only:
 ```bash
 cd backend && npx prisma migrate dev        # run migrations
-cd backend && npx prisma db seed            # seed initial data (if seed script exists)
 ```
+
+There is no seed script — `backend/package.json` has no `prisma.seed` entry and
+no `prisma/seed.ts` exists. Register users through the app or a verify script.
+
+**One-port demo:** build the frontend (`cd frontend && npm run build`); the
+backend then serves the SPA, so everything is on `:3100`.
 
 ---
 
@@ -45,41 +50,44 @@ All 12 feature documentation suites are **complete** under `docs/features/NN-fea
 
 ### Backend — what exists
 
+Six modules exist under `backend/src`. Everything else was deleted in the v1
+scope cut (ADR-0032).
+
 | Module | Location | Working? | Gap |
 |---|---|---|---|
-| Auth | `backend/src/auth/` | Partial | No `/refresh` or `/logout`; RefreshToken model in Prisma but not used |
-| Game Gateway | `backend/src/game/` | ✅ | Missing 60s disconnect auto-resign timer |
-| Matchmaking | `backend/src/matchmaking/` | ✅ | Inc 1 queue + Inc 2 REST (challenge/computer/queue-status) done & verified on `feature/matchmaking`; only Inc 3 frontend lobby left |
-| Stockfish | `backend/src/stockfish/` | ✅ (computer games) | Computer moves now run as WASM **in the browser** (ADR-0009) and come back via the `computer_move` socket event — the server-side computer-move worker was deleted. The `analysis` job is still a **placeholder returning a random move** (Inc 2). |
-| Leaderboard | `backend/src/leaderboard/` | ✅ | Missing weekly/monthly boards and 60s cache |
-| Chat | `backend/src/chat/` | Partial | No pagination, no typing events, no rate limit |
-| Notifications | `backend/src/notifications/` | Partial | CRUD only; no socket delivery or email |
-| Puzzles | `backend/src/puzzles/` | Partial | No SM-2, no Glicko-2 puzzle rating, no import script |
-| Tournaments | `backend/src/tournaments/` | Partial | Basic CRUD + join/leave; no pairing algorithms |
-| Users | `backend/src/users/` | Scaffolded | Profile update not implemented |
-| Social | — | ❌ | Not started; Friendship/Follow models missing from Prisma |
-| Analysis | — | ❌ | Not started |
+| Auth | `backend/src/auth/` | ✅ | register/login/refresh/logout/me all done. Rotating SHA-256 refresh tokens; expired rows swept on login + logout (no cron). |
+| Games | `backend/src/games/` | ✅ | Gateway + server clocks + CAS + Glicko-2 + PGN on save. Analysis is not built (that's Stockfish Inc 2). |
+| Matchmaking | `backend/src/matchmaking/` | ✅ | Queue + challenges + vs-computer + queue positions, all verified live |
+| Leaderboard | `backend/src/leaderboard/` | ✅ | All-time / week / month boards, 60s cache, own-rank, reseed-from-Postgres on boot |
+| Users | `backend/src/users/` | ✅ | Public profile, per-variant stats, player directory (`GET /users`), `PATCH /users/me` |
+| Common | `backend/src/common/` | ✅ | Prisma, Redis, Glicko-2 (`elo.ts`), CORS parsing |
+| Stockfish (analysis) | — | ❌ | Deleted from the backend. Computer moves run as WASM **in the browser** (ADR-0009) via the `computer_move` socket event. Server-side analysis is Increment 2 and starts from nothing. |
+| Chat / Notifications / Puzzles / Tournaments / Social | — | ❌ | Cut by ADR-0032; see `docs/FUTURE_SCOPE.md` |
 
 ### Frontend — what exists
 
+Everything under `frontend/src` is TypeScript (`.ts`/`.tsx`) since the
+ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
+
 | Area | Location | Working? | Gap |
 |---|---|---|---|
-| AuthContext | `frontend/src/context/AuthContext.jsx` | ✅ | Token in memory (useRef), refreshToken in sessionStorage, silent restore |
+| AuthContext | `frontend/src/context/AuthContext.tsx` | ✅ | Token in memory (useRef), refreshToken in sessionStorage, silent restore |
+| SocketContext | `frontend/src/context/SocketContext.tsx` | ✅ | Refreshes the token on `connect_error`; surfaces gateway `error` events and `reconnect_failed` as toasts |
 | Login / Signup pages | `frontend/src/pages/` | ✅ | Signup has confirmPassword + field-level 409 errors; Login has `from` redirect |
-| ChessGame component | `frontend/src/components/ChessGame.jsx` | ✅ | Color lock, draw split UI, rating modal with emoji, rematch flow |
-| SocketContext | `frontend/src/context/SocketContext.jsx` | ✅ | — |
-| Leaderboard page | `frontend/src/pages/Leaderboard.jsx` | Partial | No variant tabs or period filter |
-| GameHistory page | `frontend/src/pages/GameHistory.jsx` | Partial | No API calls wired |
-| Profile page | `frontend/src/pages/Profile.jsx` | Partial | No stats, no avatar upload |
-| Home page | `frontend/src/pages/Home.jsx` | Partial | No hero, puzzle widget, or activity feed |
-| Lobby / Matchmaking | `frontend/src/pages/Lobby.jsx` | ✅ | Quick match (with live queue position) / friend challenge / vs-computer; `useMatchmakingSocket` hook; `/challenge/:token` accept page. Build + all network contracts + **Playwright browser pass** all verified |
-| Zustand stores | — | ❌ | Not started |
+| ChessGame component | `frontend/src/components/ChessGame.tsx` | ✅ | Optimistic moves, auto-queen promotion, re-joins the room on reconnect, colour lock, draw split UI, rematch flow |
+| Lobby / Matchmaking | `frontend/src/pages/Lobby.tsx` | ✅ | Quick match (live queue position) / friend challenge / vs-computer; `/challenge/:token` accept page |
+| Leaderboard page | `frontend/src/pages/Leaderboard.tsx` | ✅ | Variant tabs + period filter + own-rank row |
+| GameHistory page | `frontend/src/pages/GameHistory.tsx` | ✅ | Wired to `GET /games/history/:userId` |
+| Profile page | `frontend/src/pages/Profile.tsx` | ✅ | Real per-variant ratings, W/L/D and recent games; `/profile/edit` saves via `PATCH /users/me`. No avatar upload. |
+| Player directory | `frontend/src/components/PlayerList.tsx` | ✅ | Wired to `GET /users` |
+| Home page | `frontend/src/pages/Home.tsx` | Partial | Hero + mode cards; no puzzle widget or activity feed (both deferred) |
+| Zustand stores | — | ❌ | Not started — plain context is still sufficient |
 | React Query | — | ❌ | Not started |
 
 ### Database state
-- PostgreSQL: migrations applied via Prisma (latest: `add_challenge`); all models in schema exist except `Friendship` and `Follow`
-- MongoDB: collections created on first write (no migration needed)
-- Redis: no persistent data; populated at runtime
+- PostgreSQL: migrations applied via Prisma; all models in schema exist except `Friendship` and `Follow`
+- `Puzzle` / `PuzzleAttempt` / `Tournament` / `TournamentPlayer` models remain in the schema but have **zero references** in `backend/src` — kept on purpose, since dropping them is a destructive migration for no runtime gain
+- Redis: no persistent data; populated at runtime. The leaderboard reseeds itself from Postgres on boot if its boards are empty.
 
 ---
 
@@ -87,10 +95,12 @@ All 12 feature documentation suites are **complete** under `docs/features/NN-fea
 
 | Severity | Location | Description |
 |---|---|---|
-| Medium | `backend/src/stockfish/stockfish.processor.ts` | `@Process('analysis')` is a placeholder: returns a **random legal move** and `evaluation: 0`. No real engine runs on the server. Increment 2 owns this. |
-| Low | `backend/src/auth/auth.service.ts` | No `/auth/refresh` or `/auth/logout`; refresh tokens accumulate in DB |
+| Medium | — | No post-game analysis at all. The backend `stockfish/` module was deleted in the v1 scope cut; Increment 2 builds it from scratch and must first decide how the server gets an engine (native binary vs. the same WASM under Node). |
+| Low | `frontend/src/components/ChessGame.tsx` | Promotion is auto-queen — there is no promotion picker. |
 
 _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emitted — the whole server-side computer-move path is gone; the engine now runs in the browser per ADR-0009._
+
+_Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/history/:userId`; a non-player's `join_room` starting a waiting room's clock; rematch navigating into a frozen room id; no room re-join after socket reconnect; every move costing a full round trip; promotions being rejected outright; Profile showing 0/0/0 for everyone; `/players` and `/profile/edit` rendering blank pages; refresh tokens accumulating forever._
 
 ---
 
@@ -100,12 +110,14 @@ _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emi
 |---|---|
 | Prisma schema | `backend/prisma/schema.prisma` |
 | NestJS entry | `backend/src/main.ts` |
-| Game Gateway | `backend/src/game/game.gateway.ts` |
-| Glicko-2 util | `backend/src/utils/elo.ts` |
-| Axios client | `frontend/src/api/client.ts` |
-| Socket context | `frontend/src/context/SocketContext.jsx` |
+| Game Gateway | `backend/src/games/game.gateway.ts` |
+| Glicko-2 util | `backend/src/common/utils/elo.ts` |
+| Axios client + refresh interceptors | `frontend/src/api.ts` |
+| Socket context | `frontend/src/context/SocketContext.tsx` |
+| Socket + REST contracts | `frontend/src/types.ts` |
 | Docker services | `docker-compose.yml` |
-| Stockfish WASM hook | `frontend/src/hooks/useStockfish.js` |
+| Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
+| Live verification scripts | `frontend/scripts/verify-*.mjs` |
 | Engine copy script | `frontend/scripts/copy-engine.mjs` (runs on `predev`/`prebuild`; `public/engine/` is gitignored) |
 | Full API reference | `docs/architecture/api-reference.md` |
 | WebSocket events | `docs/architecture/websocket-events.md` |
@@ -115,21 +127,32 @@ _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emi
 
 ## Environment Variables Needed
 
-**Backend (`backend/.env`):**
+**Backend (`backend/.env`)** — see `backend/.env.example`:
 ```
-DATABASE_URL=postgresql://postgres:password@localhost:5432/chessweb
-MONGODB_URI=mongodb://localhost:27017/chessweb
+DATABASE_URL=postgresql://chess:chess123@localhost:5432/chessweb
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=your-secret-here
 JWT_EXPIRES_IN=15m
-REFRESH_TOKEN_EXPIRES_IN=30d
+REFRESH_TOKEN_EXPIRES_DAYS=30
+PORT=3100
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
 ```
 
-**Frontend (`frontend/.env`):**
+`MONGODB_URI` is gone — Mongo was removed from the stack on 2026-07-19 and has
+no consumers. `CORS_ORIGIN=*` reflects **any** origin with `credentials: true`;
+it exists for throwaway tunnel demos and logs a `[SECURITY]` warning on boot.
+Never deploy it.
+
+**Frontend (`frontend/.env`)** — see `frontend/.env.example`:
 ```
-VITE_API_URL=http://localhost:3000
-VITE_WS_URL=http://localhost:3000
+VITE_SERVER_URL=            # leave empty for same-origin (dev proxy / one-port prod)
 ```
+
+One var, not the `VITE_API_URL` / `VITE_WS_URL` pair older revisions of this file
+described — both the axios client and the socket derive their origin from it, and
+an empty value means "same origin".
 
 ---
 
@@ -137,9 +160,15 @@ VITE_WS_URL=http://localhost:3000
 
 1. `docs/CURRENT_SPRINT.md` — what's happening right now
 2. `docs/PROGRESS.md` — increment-level status across all features
-3. `docs/features/NN-feature/START_HERE.md` — orientation for the feature you're working on
-4. `docs/features/NN-feature/IMPLEMENTATION_PROMPT_INCREMENT_N.md` — copy into chat to start coding
+3. `docs/architecture/api-reference.md` + `websocket-events.md` — the live contracts
+4. `docs/features/NN-feature/START_HERE.md` — orientation for the feature you're working on
+
+> **`docs/features/**` is frozen scaffolding.** Those folders were written before
+> the v1 scope cut and the 3000 → 3100 port move; their curl examples, env var
+> names and module lists are historical, not current. Trust
+> `docs/architecture/` and this file instead.
 
 ---
 
-_Last updated: 2026-07-12 (Stockfish — browser-WASM computer games working end to end; server-side computer-move path deleted per ADR-0009)_
+_Last updated: 2026-08-16 (pre-Increment-2 hardening pass: security, game-path,
+UI and docs; ports/env corrected to 3100 + VITE_SERVER_URL)_

@@ -140,6 +140,71 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/pre-inc2-hardening` — close every known defect before Stockfish Inc 2.
+
+Cut from `dev` on 2026-08-16. Both compilers were already clean, so everything
+here is runtime, UX or consistency. Found by a full read of `backend/src` +
+`frontend/src` against the docs; each item was verified at its call site.
+
+- **Security.** `GET /games/history/:userId` had **no guard** — usernames are
+  public and `GET /users/:username` returns `id`, so username → id → anyone's
+  full game history needed zero login. Guarded. `join_room`'s waiting→active
+  branch had no membership check, so any authed socket that learned a room id
+  could flip it to `active` and start white's clock before white connected;
+  non-players now get a read-only `game_state` snapshot and return. Origin
+  reflection (`CORS_ORIGIN=*`) kept as the tunnel-demo escape hatch but now logs
+  a `[SECURITY]` warning on boot.
+- **Game path.** `Game.tsx` froze `roomId` in `useState`, so a rematch navigated
+  to the new room while the board stayed wired to the finished one — **rematch
+  was dead**. Now derived from `useParams` with `<ChessGame key={roomId}>`.
+  `ChessGame` never re-emitted `join_room` after a socket reconnect, so any
+  network blip silently froze the game (socket.io restores the connection, not
+  server-side room membership) — fixed with the same `connect` re-emit
+  `useMatchmakingSocket` already used.
+- **Latency.** Moves were fully round-trip-bound: the board is controlled by
+  server `fen`, so the piece snapped back until `move_made` returned. Moves now
+  apply optimistically and reconcile against the server, with `invalid_move` as
+  the rollback path. Separately: the client never sent `promotion`, so the
+  server's chess.js rejected **every promoting move** — now auto-queens.
+  `Clock`/`PlayerBar` were declared inside `ChessGame`'s render body and so
+  remounted their DOM once per second on every clock tick; hoisted to module
+  scope.
+- **Silent failures.** Nothing listened for the gateways' `error` event
+  (`ALREADY_IN_QUEUE`, `Room not found`, `Not authenticated`) or for
+  `reconnect_failed`. All now surface as toasts, and `connect_error` refreshes
+  the access token once before the retries continue.
+- **Dead UI, wired not deleted.** Profile read `user.rating/wins/losses/recentGames`,
+  none of which `/auth/me` returns — it showed **0/0/0 for every user**. Now
+  reads the existing `/users/:username/stats` (which already carries per-variant
+  wins/losses/draws) plus recent games. `PlayerList` called `GET /players`, which
+  never existed; added `GET /users` (paged, capped, explicit select — no
+  `passwordHash`/`email`) and wired the previously-unused `PlayerCard` into it.
+  `/profile/edit` and any bad URL rendered blank pages; added the edit page (on
+  the existing `PATCH /users/me`) and a catch-all 404 route.
+- **Backend hygiene.** `updateScore` did 6 serial Redis round trips per player on
+  the game-over path (12 per rated game) — pipelined. `REFRESH_TOKEN_EXPIRES_DAYS`
+  was never read (30d hardcoded twice) — wired. Expired refresh tokens
+  accumulated forever behind a comment claiming a cron that does not exist — now
+  swept on login. `Game.pgn` had no producer and was always `""` — now written.
+  Dropped `@@index` duplicates of `@unique` columns, the dead `online:` Redis key,
+  `expiredDeadlines()`, and the `variant` DTO field both services ignored while
+  validating (a client could ask for bullet at 1800s and be rated rapid).
+- **Docs.** `api-reference.md` documented 7 deleted modules plus routes that never
+  existed, and marked the unguarded history route as authed. `websocket-events.md`
+  invented `/game` and `/matchmaking` namespaces (both gateways share the default
+  one) and a `get_queue_status`/`queue_stats` pair that was never built, while
+  omitting the implemented rematch events. README still advertised MongoDB +
+  BullMQ and a 12-module backend. All corrected; `docs/features/**` explicitly
+  marked frozen.
+
+**Status:** code complete, both builds clean (`tsc --noEmit` + `nest build` +
+`vite build`). **Live verification and the Prisma migration are still pending** —
+Docker Desktop was down, so `docker compose up -d` failed and nothing was
+listening on 5432/6379. Outstanding:
+`npx prisma migrate dev --name drop_redundant_indexes` and
+`node frontend/scripts/verify-hardening.mjs`.
+
+## Previously In Progress
 `feature/leaderboard-polish` — Leaderboard increments 2 + 3. DONE, verified 16/16.
 
 - **Inc 2 (backend):** period-bucketed ZSETs `leaderboard:{week:isoWeek|month:yyyy-mm}:{variant}`,
@@ -228,14 +293,19 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Commit `feature/stockfish`** and merge → `dev` (auth, game-engine, matchmaking are already on `main`).
-2. **Stockfish Inc 2** — the analysis worker: depth-18 analysis, move classification, MongoDB storage,
-   `POST /analysis/request` + `GET /analysis/:gameId`. Note the processor's `@Process('analysis')` is
-   still a **placeholder that returns a random legal move and `evaluation: 0`** — it does not run a real
-   engine. Inc 2 has to decide how the server gets one (spawn a native binary, or run the same WASM under
-   Node — the WASM build already works headless, which is how it was verified this session).
-3. **Browser click-through of a computer game** — Playwright isn't installed here; the DOM path is covered
-   only by the production build + the verified socket contract.
+1. **Finish the hardening pass** — start Docker Desktop, then
+   `npx prisma migrate dev --name drop_redundant_indexes` and
+   `node frontend/scripts/verify-hardening.mjs`. Merge `feature/pre-inc2-hardening` → `dev`.
+2. **Stockfish Inc 2** — the analysis worker: depth-18 analysis, move classification, storage,
+   `POST /analysis/request` + `GET /analysis/:gameId`. Note the backend `stockfish/` module was
+   **deleted** in the v1 scope cut, so this starts from nothing rather than from the old placeholder.
+   Inc 2 has to decide how the server gets an engine (spawn a native binary, or run the same WASM under
+   Node — the WASM build already works headless, which is how the computer-move path was verified).
+   Storage is Postgres now, not MongoDB — Mongo is gone.
+3. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
+   only by the production build + the verified socket contracts. The hardening pass added several
+   UI changes (optimistic moves, rematch, Profile, `/players`, 404) that have never rendered in a
+   real browser.
 
 ## Branch Order (full sequence)
 ```
@@ -321,4 +391,21 @@ Full analysis: `temp_architecture.md` (options + trade-offs), `temp_everything.m
 
 ---
 
-_Last updated: 2026-07-19 (Architecture locked: A → B per ADR-0032; v1 scope cut; ADR-0004 found unimplemented)_
+## Merged to `dev`, previously unlogged
+
+These landed in the `81c78e1` merge but had no sprint entry until 2026-08-16:
+
+- `8e1a6d6` — leaderboard: time-scoped boards + 60s cache + period filter & own-rank (logged below)
+- `ad5c38a` — default backend port **3000 → 3100**
+- `8ea141f` — single-origin proxy + reflectable CORS for zero-deploy demos
+- `dd7a1a4` — backend serves the built frontend (one-port demo/prod)
+
+The port move left `:3000` stale across README, `docs/RESUME.md`, `docs/PLAN_SUMMARY.md`
+and ~100 references in `docs/features/**`. The live docs are corrected;
+`docs/features/**` is marked frozen rather than swept.
+
+---
+
+_Last updated: 2026-08-16 (pre-Increment-2 hardening pass — security, game path,
+latency, dead UI, backend hygiene, live docs; migration + live verification still
+pending on Docker)_

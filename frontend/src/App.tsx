@@ -14,6 +14,8 @@ import PlayerList from "./components/PlayerList";
 import Leaderboard from "./pages/Leaderboard";
 import Puzzles from "./pages/Puzzles";
 import Tournaments from "./pages/Tournaments";
+import ProfileEdit from "./pages/ProfileEdit";
+import NotFound from "./pages/NotFound";
 
 export default function App() {
   return (
@@ -60,8 +62,13 @@ export default function App() {
             <Route path="/game" element={<Game />} />
             <Route path="/game/:roomId" element={<Game />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/edit" element={<ProfileEdit />} />
             <Route path="/history" element={<GameHistory />} />
           </Route>
+
+          {/* Anything else — a typo or a stale bookmark — rendered a blank
+              page under the Navbar before this existed. */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </div>

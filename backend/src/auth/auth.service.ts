@@ -10,6 +10,17 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshDto } from './dto/refresh.dto';
 
+/**
+ * Refresh-token lifetime. Previously hardcoded as `30 * 24 * 60 * 60 * 1000` at
+ * both the login and rotation sites, which left REFRESH_TOKEN_EXPIRES_DAYS in
+ * .env doing nothing and let the two sites drift apart.
+ */
+const REFRESH_TOKEN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 30;
+
+function refreshTokenExpiry(): Date {
+  return new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -84,7 +95,7 @@ export class AuthService {
       data: {
         token: tokenHash,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: refreshTokenExpiry(),
       },
     });
 
@@ -92,6 +103,14 @@ export class AuthService {
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
+
+    // Bound table growth. A user who simply stops refreshing (rather than
+    // logging out) used to leave their expired rows behind forever — there is
+    // no scheduled job in this app, despite an old comment claiming otherwise.
+    // Fire-and-forget: never fail a login because cleanup failed.
+    this.prisma.refreshToken
+      .deleteMany({ where: { userId: user.id, expiresAt: { lt: new Date() } } })
+      .catch(() => undefined);
 
     return { accessToken, refreshToken: rawRefreshToken, user: this.toProfile(user) };
   }
@@ -109,7 +128,7 @@ export class AuthService {
       if (storedToken.expiresAt < new Date()) {
         // Don't attempt delete inside the transaction — throwing here rolls back everything,
         // so the delete would never commit. Expired tokens are harmless (always rejected by
-        // this check) and are cleaned up when the user logs out or via a scheduled job.
+        // this check) and are swept on the user's next login and on logout.
         throw new UnauthorizedException({ message: 'Refresh token expired', code: 'REFRESH_TOKEN_INVALID' });
       }
 
@@ -140,7 +159,7 @@ export class AuthService {
         data: {
           token: newTokenHash,
           userId: user.id,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          expiresAt: refreshTokenExpiry(),
         },
       });
 

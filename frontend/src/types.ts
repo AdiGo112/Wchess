@@ -139,6 +139,41 @@ export interface GameRecord {
   createdAt: string;
 }
 
+/** One row of GET /users — the public player directory. */
+export interface PlayerSummary {
+  id: string;
+  username: string;
+  name: string;
+  createdAt: string;
+  /** Highest rating across variants; null for a player who has never been rated. */
+  rating: number | null;
+}
+
+export interface PlayerListResponse {
+  players: PlayerSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** One per-variant rating row from GET /users/:username/stats. */
+export interface VariantRating {
+  variant: string;
+  rating: number;
+  ratingDeviation: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  provisional: boolean;
+}
+
+export interface UserStatsResponse {
+  userId: string;
+  username: string;
+  ratings: VariantRating[];
+  totalGames: number;
+}
+
 export interface LeaderboardRow {
   userId: string;
   username: string;

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, CSSProperties } from
 import { useNavigate } from "react-router-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
+import toast from "react-hot-toast";
 import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
@@ -29,6 +30,47 @@ interface ChessGameProps {
   timeControl?: number;
 }
 
+const formatTime = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+};
+
+/* Clock chip. Low time (<30s) inverts and blinks — motion, not color.
+   Module scope, NOT nested in ChessGame: a component declared inside a render
+   body gets a fresh identity every render, so the 1s clock tick was unmounting
+   and remounting both player bars' DOM once per second. */
+const Clock = ({ ms, urgent }: { ms: number; urgent: boolean }) => (
+  <span
+    className={`font-mono text-xl font-bold px-3 py-1 border-[3px] border-ink ${
+      urgent ? "bg-ink text-white animate-blink" : "bg-white text-ink"
+    }`}
+  >
+    {formatTime(ms)}
+  </span>
+);
+
+const PlayerBar = ({
+  player,
+  ms,
+  fallback,
+  urgent,
+}: {
+  player: RoomPlayer | null;
+  ms: number;
+  fallback: string;
+  urgent: boolean;
+}) => (
+  <div className="card-b-flat flex justify-between items-center min-w-[min(300px,100%)] !py-2.5">
+    <span className="font-bold uppercase tracking-wider text-sm truncate">
+      {player?.username ?? fallback}
+      {player?.rating != null && (
+        <span className="ml-2 text-neutral-500 font-mono text-xs">({player.rating})</span>
+      )}
+    </span>
+    <Clock ms={ms} urgent={urgent} />
+  </div>
+);
+
 export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   const navigate = useNavigate();
   const { socket } = useSocket();
@@ -50,6 +92,9 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
 
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const turnRef = useRef<"w" | "b">("w");
+  // Position before the last optimistically-applied move, so `invalid_move`
+  // can roll the board back to the last server-agreed state.
+  const preMoveFenRef = useRef<string | null>(null);
 
   const getBestMove = useStockfish(difficulty !== null, difficulty ?? 3);
 
@@ -72,6 +117,13 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
 
     socket.emit("join_room", { roomId });
 
+    // Socket.io reconnects transparently, but the server-side room membership
+    // (client.join) is per-connection and is NOT restored — without this the
+    // board stops receiving move_made/clock_sync/game_over and silently
+    // freezes after any network blip. Same pattern as useMatchmakingSocket.
+    const onReconnect = () => socket.emit("join_room", { roomId });
+    socket.on("connect", onReconnect);
+
     socket.on("game_start", (data: GameStartPayload) => {
       const chess = new Chess(data.fen);
       turnRef.current = chess.turn();
@@ -86,6 +138,8 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     });
 
     socket.on("move_made", (data: MoveMadePayload) => {
+      // Authoritative position confirmed — nothing left to roll back.
+      preMoveFenRef.current = null;
       const chess = new Chess(data.fen);
       turnRef.current = chess.turn();
       setGame(chess);
@@ -125,7 +179,19 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       startClock();
     });
 
-    socket.on("invalid_move", (data: { reason: string }) => console.warn("Invalid move:", data.reason));
+    // Revert the optimistic move: the server rejected it.
+    socket.on("invalid_move", (data: { reason: string }) => {
+      const previous = preMoveFenRef.current;
+      preMoveFenRef.current = null;
+      if (previous) {
+        const chess = new Chess(previous === "start" ? undefined : previous);
+        turnRef.current = chess.turn();
+        setGame(chess);
+        setFen(previous);
+        setLastMove(null);
+      }
+      toast.error(data.reason || "Illegal move");
+    });
 
     // Server-authoritative clock correction every 1s (ADR-0004); the local
     // interval only interpolates between these.
@@ -141,6 +207,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         "opponent_disconnected", "opponent_reconnected", "game_state", "invalid_move",
         "clock_sync", "rematch_offered", "rematch_ready",
       ].forEach((e) => socket.off(e));
+      socket.off("connect", onReconnect);
       stopClock();
     };
   }, [socket, roomId, user, navigate, startClock, stopClock, timeControl]);
@@ -169,15 +236,46 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     [gameOver, orientation],
   );
 
-  const onDrop = (sourceSquare: string, targetSquare: string) => {
-    if (!socket || !roomId || gameOver) return false;
-    const chess = new Chess(fen === "start" ? undefined : fen);
-    const isMyTurn = (chess.turn() === "w" && orientation === "white") ||
-                     (chess.turn() === "b" && orientation === "black");
-    if (!isMyTurn) return false;
-    socket.emit("move", { roomId, from: sourceSquare, to: targetSquare });
-    return true;
-  };
+  /* Optimistic move: apply locally first, then emit. The board is a controlled
+     component (position={fen}), so without this the piece visibly snaps back
+     and only lands once the server round trip completes. `move_made` overwrites
+     fen wholesale with the authoritative position, so this self-reconciles; the
+     server remains the only authority and `invalid_move` is the revert path. */
+  const onDrop = useCallback(
+    (sourceSquare: string, targetSquare: string) => {
+      if (!socket || !roomId || gameOver) return false;
+
+      const chess = new Chess(fen === "start" ? undefined : fen);
+      const isMyTurn =
+        (chess.turn() === "w" && orientation === "white") ||
+        (chess.turn() === "b" && orientation === "black");
+      if (!isMyTurn) return false;
+
+      // ponytail: auto-queen. A promotion picker is real UI work; every other
+      // promotion is rare enough that queen is the right default. Until this
+      // existed the client sent no `promotion` at all, so the server's chess.js
+      // rejected every promoting move as illegal.
+      const promotion = "q";
+
+      let applied;
+      try {
+        applied = chess.move({ from: sourceSquare, to: targetSquare, promotion });
+      } catch {
+        return false; // chess.js throws on an illegal move
+      }
+      if (!applied) return false;
+
+      preMoveFenRef.current = fen;
+      turnRef.current = chess.turn();
+      setGame(chess);
+      setFen(chess.fen());
+      setLastMove({ from: sourceSquare, to: targetSquare });
+
+      socket.emit("move", { roomId, from: sourceSquare, to: targetSquare, promotion });
+      return true;
+    },
+    [socket, roomId, gameOver, fen, orientation],
+  );
 
   /* Strict-mono square highlights:
      - last move: inverted-feel overlay (light squares darken, via ink @ 18%)
@@ -231,11 +329,6 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     if (socket && roomId) socket.emit("rematch_request", { roomId });
   };
 
-  const formatTime = (ms: number) => {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-  };
-
   const topPlayer = orientation === "white" ? players.black : players.white;
   const bottomPlayer = orientation === "white" ? players.white : players.black;
   const topTimer = orientation === "white" ? timers.black : timers.white;
@@ -257,38 +350,18 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     };
   };
 
-  /* Clock chip. Low time (<30s) inverts and blinks — motion, not color. */
-  const Clock = ({ ms }: { ms: number }) => (
-    <span
-      className={`font-mono text-xl font-bold px-3 py-1 border-[3px] border-ink ${
-        ms < 30000 && !gameOver
-          ? "bg-ink text-white animate-blink"
-          : "bg-white text-ink"
-      }`}
-    >
-      {formatTime(ms)}
-    </span>
-  );
-
-  const PlayerBar = ({ player, ms, fallback }: { player: RoomPlayer | null; ms: number; fallback: string }) => (
-    <div className="card-b-flat flex justify-between items-center min-w-[300px] !py-2.5">
-      <span className="font-bold uppercase tracking-wider text-sm truncate">
-        {player?.username ?? fallback}
-        {player?.rating != null && (
-          <span className="ml-2 text-neutral-500 font-mono text-xs">({player.rating})</span>
-        )}
-      </span>
-      <Clock ms={ms} />
-    </div>
-  );
-
   const resultDisplay = getResultDisplay();
   const canRematch = !!gameOver && !!players.black && players.black.id !== "computer";
 
   return (
     <div className="flex flex-wrap gap-8 items-start justify-center w-full">
       <div className="flex flex-col gap-4">
-        <PlayerBar player={topPlayer} ms={topTimer} fallback="Waiting..." />
+        <PlayerBar
+          player={topPlayer}
+          ms={topTimer}
+          fallback="Waiting..."
+          urgent={topTimer < 30000 && !gameOver}
+        />
 
         {/* Board */}
         <div style={{ width: "clamp(280px, 90vmin, 500px)" }}>
@@ -305,7 +378,12 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
           />
         </div>
 
-        <PlayerBar player={bottomPlayer} ms={bottomTimer} fallback={user?.username ?? "You"} />
+        <PlayerBar
+          player={bottomPlayer}
+          ms={bottomTimer}
+          fallback={user?.username ?? "You"}
+          urgent={bottomTimer < 30000 && !gameOver}
+        />
 
         {/* Game controls */}
         {!gameOver && (

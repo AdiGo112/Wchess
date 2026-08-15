@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Chess } from 'chess.js';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { updateGlicko2, variantFromTimeControl } from '../common/utils/elo';
@@ -101,11 +102,6 @@ export class GamesService {
     await this.redis.zrem(DEADLINES_KEY, roomId);
   }
 
-  /** Room ids whose deadline has passed (side to move has flagged + grace). */
-  async expiredDeadlines(now: number): Promise<string[]> {
-    return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', now);
-  }
-
   /** All room ids currently under clock watch (i.e. active games). */
   async watchedRooms(): Promise<string[]> {
     return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', '+inf');
@@ -166,6 +162,43 @@ export class GamesService {
     );
   }
 
+  /**
+   * Standard PGN from the room's SAN move list. `Game.pgn` existed as a column
+   * with no producer — it was always the empty-string default, which would have
+   * left every archived game unexportable and unanalysable.
+   */
+  private buildPgn(
+    room: ActiveRoom,
+    result: 'WHITE' | 'BLACK' | 'DRAW' | 'ABORTED',
+  ): string {
+    const chess = new Chess();
+    for (const san of room.moves) {
+      try {
+        chess.move(san);
+      } catch {
+        // A malformed move list must never block persisting the game.
+        break;
+      }
+    }
+
+    const outcome =
+      result === 'WHITE' ? '1-0' : result === 'BLACK' ? '0-1' : result === 'DRAW' ? '1/2-1/2' : '*';
+
+    chess.header(
+      'Event', 'WChess',
+      'Site', 'WChess',
+      'Date', new Date(room.startedAt).toISOString().slice(0, 10).replace(/-/g, '.'),
+      'White', room.whitePlayer.username,
+      'Black', room.blackPlayer?.username ?? '?',
+      'WhiteElo', String(room.whitePlayer.rating),
+      'BlackElo', String(room.blackPlayer?.rating ?? ''),
+      'TimeControl', `${room.timeControl}+${room.increment}`,
+      'Result', outcome,
+    );
+
+    return chess.pgn();
+  }
+
   async saveCompletedGame(params: {
     room: ActiveRoom;
     result: 'WHITE' | 'BLACK' | 'DRAW' | 'ABORTED';
@@ -176,12 +209,14 @@ export class GamesService {
 
     const variant = variantFromTimeControl(room.timeControl) as any;
 
-    const whiteRating = await this.prisma.userRating.findUnique({
-      where: { userId_variant: { userId: room.whitePlayer.id, variant } },
-    });
-    const blackRating = await this.prisma.userRating.findUnique({
-      where: { userId_variant: { userId: room.blackPlayer.id, variant } },
-    });
+    const [whiteRating, blackRating] = await Promise.all([
+      this.prisma.userRating.findUnique({
+        where: { userId_variant: { userId: room.whitePlayer.id, variant } },
+      }),
+      this.prisma.userRating.findUnique({
+        where: { userId_variant: { userId: room.blackPlayer.id, variant } },
+      }),
+    ]);
 
     let whiteScore: 0 | 0.5 | 1 = 0.5;
     let blackScore: 0 | 0.5 | 1 = 0.5;
@@ -198,6 +233,7 @@ export class GamesService {
     const blackDiff = newBlack.rating - bR.rating;
 
     const duration = Math.round((Date.now() - room.startedAt) / 1000);
+    const pgn = this.buildPgn(room, result);
 
     const createGame = this.prisma.game.create({
       data: {
@@ -216,6 +252,7 @@ export class GamesService {
         increment: room.increment,
         moves: room.moves,
         fen: room.fen,
+        pgn,
         duration,
       },
     });
