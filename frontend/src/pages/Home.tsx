@@ -92,18 +92,19 @@ export default function Home() {
             body: "Stockfish runs in YOUR browser. Five difficulties, zero excuses.",
           },
         ].map((c) => (
-          <div
+          <button
             key={c.title}
-            className="card-b hover:-translate-y-1 hover:shadow-brutal-lg transition-all cursor-pointer"
+            type="button"
+            className="card-b text-left hover:-translate-y-1 hover:shadow-brutal-lg transition-all cursor-pointer"
             onClick={() => navigate("/lobby")}
           >
-            <span className="text-3xl grayscale">{c.glyph}</span>
+            <span className="text-3xl grayscale" aria-hidden="true">{c.glyph}</span>
             <h3 className="heading-b text-xl mt-3">{c.title}</h3>
             <p className="mt-2 text-sm text-neutral-600 font-medium">{c.body}</p>
             <p className="mt-4 text-xs font-bold uppercase tracking-widest underline decoration-2 underline-offset-4">
               Go →
             </p>
-          </div>
+          </button>
         ))}
       </section>
 

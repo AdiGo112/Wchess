@@ -136,7 +136,6 @@ export class GameGateway
       // No TTL: this mapping must outlive any session length (it's used to
       // deliver e.g. challenge_accepted) and is explicitly deleted on disconnect.
       await this.redis.set(`user:socket:${payload.sub}`, client.id);
-      await this.redis.set(`online:${payload.sub}`, '1', 30);
 
       this.logger.log(`Client connected: ${payload.username} (${client.id})`);
     } catch {
@@ -150,7 +149,6 @@ export class GameGateway
 
     await Promise.all([
       this.redis.del(`socket:${client.id}`),
-      this.redis.del(`online:${userId}`),
       this.redis.del(`user:socket:${userId}`),
     ]);
 
@@ -207,8 +205,26 @@ export class GameGateway
     // falls through to in handleDisconnect).
     if (isWhite || isBlack) client.data.roomId = data.roomId;
 
+    // Observer: someone who opened a shared game URL. They get a one-shot
+    // snapshot and nothing else — they must never flip the room to 'active'
+    // (that would start white's clock before white connected) nor trigger a
+    // game_start broadcast at the real players.
+    if (!isWhite && !isBlack) {
+      client.emit('game_state', {
+        roomId: room.id,
+        white: room.whitePlayer,
+        black: room.blackPlayer,
+        fen: room.fen,
+        timers: room.timers,
+        moves: room.moves,
+        drawOfferedBy: room.drawOfferedBy,
+        difficulty: room.difficulty,
+      });
+      return;
+    }
+
     // Reconnect: player is returning to an active game
-    if ((isWhite || isBlack) && room.status === 'active') {
+    if (room.status === 'active') {
       const color = isWhite ? 'white' : 'black';
       const timerKey = `${data.roomId}:${color}`;
       const timer = this.disconnectTimers.get(timerKey);
@@ -232,7 +248,7 @@ export class GameGateway
       return;
     }
 
-    // First join
+    // First join (player, room still waiting)
     if (room.status === 'waiting') {
       room.status = 'active';
       room.startedAt = Date.now();

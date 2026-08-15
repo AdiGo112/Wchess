@@ -1,12 +1,17 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy {
+export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private client: Redis;
+  private readonly client: Redis;
 
-  onModuleInit() {
+  // Built in the constructor, NOT onModuleInit: Nest gives no ordering
+  // guarantee between one provider's onModuleInit and another's, so a consumer
+  // that touches Redis from its own onModuleInit (LeaderboardService seeding)
+  // would hit an undefined client. ioredis connects asynchronously anyway and
+  // queues commands issued before the socket is up, so this costs nothing.
+  constructor() {
     this.client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
       maxRetriesPerRequest: 3,
       retryStrategy: (times) => Math.min(times * 100, 3000),

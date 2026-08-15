@@ -34,8 +34,8 @@ model User {
   refreshTokens  RefreshToken[]
   challenges     Challenge[]
 
-  @@index([username])
-  @@index([email])
+  // No @@index on username/email: both are @unique, which already creates a
+  // btree. A second index on the same column is pure write amplification.
 }
 
 enum Role {
@@ -52,7 +52,7 @@ model RefreshToken {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([token])
+  // `token` is @unique — already indexed. userId is the FK we filter on.
   @@index([userId])
 }
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Menu, X, LogOut, User, ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -15,8 +15,35 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
+  const profileRef = useRef<HTMLDivElement>(null);
+
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const toggleProfile = () => setProfileOpen(!profileOpen);
+
+  // Both menus used to stay open until their trigger was clicked again —
+  // clicking anywhere else on the page did nothing.
+  useEffect(() => {
+    if (!profileOpen && !menuOpen) return;
+
+    const onPointerDown = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setProfileOpen(false);
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [profileOpen, menuOpen]);
 
   const navLinks: NavItem[] = [
     { path: "/", label: "Home" },
@@ -38,15 +65,19 @@ export default function Navbar() {
     <nav className="w-full bg-paper border-b-[3px] border-ink sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         {/* Logo — glyph in a hard-shadowed box */}
-        <div
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 cursor-pointer select-none group"
+        <Link
+          to="/"
+          aria-label="WChess home"
+          className="flex items-center gap-2 select-none group"
         >
-          <span className="inline-flex items-center justify-center w-9 h-9 bg-ink text-white text-xl border-[3px] border-ink shadow-brutal-sm group-hover:shadow-brutal transition-shadow">
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center w-9 h-9 bg-ink text-white text-xl border-[3px] border-ink shadow-brutal-sm group-hover:shadow-brutal transition-shadow"
+          >
             ♞
           </span>
           <span className="font-display text-xl tracking-tight">WCHESS</span>
-        </div>
+        </Link>
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-1 relative">
@@ -58,9 +89,11 @@ export default function Navbar() {
           ))}
 
           {user ? (
-            <div className="relative ml-3">
+            <div className="relative ml-3" ref={profileRef}>
               <button
                 onClick={toggleProfile}
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
                 className="flex items-center gap-2 border-[3px] border-ink bg-white px-3 py-1.5 shadow-brutal-sm hover:shadow-brutal transition-shadow"
               >
                 <span className="w-6 h-6 bg-ink text-white flex items-center justify-center font-display text-xs">
@@ -73,7 +106,10 @@ export default function Navbar() {
               </button>
 
               {profileOpen && (
-                <div className="absolute right-0 mt-2 w-44 bg-white border-[3px] border-ink shadow-brutal">
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-44 bg-white border-[3px] border-ink shadow-brutal"
+                >
                   <button
                     onClick={() => {
                       navigate("/profile");
@@ -110,6 +146,8 @@ export default function Navbar() {
         <div className="md:hidden">
           <button
             onClick={toggleMenu}
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
             className="border-[3px] border-ink bg-white p-1.5 shadow-brutal-sm active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
           >
             {menuOpen ? <X size={20} /> : <Menu size={20} />}

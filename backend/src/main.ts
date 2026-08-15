@@ -9,10 +9,16 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
-  app.enableCors({
-    origin: parseCorsOrigin(),
-    credentials: true,
-  });
+  const corsOrigin = parseCorsOrigin();
+  if (corsOrigin === true) {
+    console.warn(
+      '[SECURITY] CORS_ORIGIN=* — every requesting origin is reflected back ' +
+        'with credentials:true, so any site can read authenticated API ' +
+        'responses. Intended for throwaway tunnel demos only. Set CORS_ORIGIN ' +
+        'to an explicit origin (or a comma-separated list) before deploying.',
+    );
+  }
+  app.enableCors({ origin: corsOrigin, credentials: true });
 
   app.useGlobalPipes(
     new ValidationPipe({

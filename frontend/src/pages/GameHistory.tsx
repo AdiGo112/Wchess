@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api";
+import { describeResult, ratingDelta } from "../utils/gameResult";
 import type { GameRecord } from "../types";
 
 export default function GameHistory() {
@@ -15,21 +16,6 @@ export default function GameHistory() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user]);
-
-  /* Strict mono: result reads through glyph + weight, not color.
-     ▲ win (bold, inverted chip) / ▼ loss / = draw */
-  const getResult = (game: GameRecord) => {
-    const isWhite = game.whiteId === user?.id;
-    const result = game.result?.toLowerCase();
-    if (result === "draw") return { glyph: "=", label: "Draw", win: false };
-    const won = (result === "white" && isWhite) || (result === "black" && !isWhite);
-    return won ? { glyph: "▲", label: "Win", win: true } : { glyph: "▼", label: "Loss", win: false };
-  };
-
-  const getRatingChange = (game: GameRecord) => {
-    const isWhite = game.whiteId === user?.id;
-    return isWhite ? game.whiteRatingDiff : game.blackRatingDiff;
-  };
 
   const getOpponent = (game: GameRecord) =>
     game.whiteId === user?.id ? game.blackUsername : game.whiteUsername;
@@ -58,8 +44,8 @@ export default function GameHistory() {
       ) : (
         <div className="flex flex-col gap-4">
           {games.map((game) => {
-            const ratingChange = getRatingChange(game);
-            const res = getResult(game);
+            const ratingChange = ratingDelta(game, user?.id);
+            const res = describeResult(game, user?.id);
             return (
               <div
                 key={game.id}
@@ -87,7 +73,7 @@ export default function GameHistory() {
                 </div>
                 <span className="font-mono font-bold whitespace-nowrap">
                   {ratingChange > 0 ? "+" : ""}
-                  {ratingChange ?? 0}
+                  {ratingChange}
                 </span>
               </div>
             );
