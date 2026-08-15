@@ -197,12 +197,37 @@ here is runtime, UX or consistency. Found by a full read of `backend/src` +
   BullMQ and a 12-module backend. All corrected; `docs/features/**` explicitly
   marked frozen.
 
-**Status:** code complete, both builds clean (`tsc --noEmit` + `nest build` +
-`vite build`). **Live verification and the Prisma migration are still pending** —
-Docker Desktop was down, so `docker compose up -d` failed and nothing was
-listening on 5432/6379. Outstanding:
-`npx prisma migrate dev --name drop_redundant_indexes` and
-`node frontend/scripts/verify-hardening.mjs`.
+**Status: DONE, verified 19/19 live** (`frontend/scripts/verify-hardening.mjs`).
+Both builds clean (`tsc --noEmit` + `nest build` + `vite build`).
+
+- Migration `20260815204254_drop_redundant_indexes` applied — exactly three
+  `DROP INDEX` statements (`User_username_idx`, `User_email_idx`,
+  `RefreshToken_token_idx`), nothing else; `migrate status` clean.
+- Verified live: unauth'd history → 401 / authed → 200; an observer's
+  `join_room` neither broadcasts `game_start` nor starts the clock (players
+  still get a full 300000/300000); `GET /users` returns id/username/rating with
+  **no** `passwordHash` or `email`; per-variant stats populate Profile; a
+  duplicate `join_queue` now actually reaches the client as
+  `ALREADY_IN_QUEUE`; `Game.pgn` is written with real movetext and a `Result`
+  tag; all three leaderboard tiers still populate after the pipelining change,
+  with own-rank working per period.
+- The `[SECURITY]` CORS warning fires on `CORS_ORIGIN=*` (checked on a
+  throwaway port).
+- Leaderboard reseed exercised against a scratch Redis db: 304 rating rows →
+  all/week/month keys in the documented shape.
+
+**One bug found by running it that the compiler could not see.** The new
+`LeaderboardService.onModuleInit` ran *before* `RedisService.onModuleInit` had
+assigned `this.client` — Nest gives no ordering guarantee between two providers'
+`onModuleInit` — so every boot logged `Leaderboard seed failed:
+Cannot read properties of undefined (reading 'exists')`. The seed's own
+try/catch kept it from blocking startup, which is exactly why only a real boot
+surfaced it. Fixed in `2d792a1` by building the Redis client in the
+**constructor**, which removes the hazard for every future consumer.
+
+Watch out when re-running: a stale watch-mode server holds `:3100` and the
+restart dies with `EADDRINUSE` while the old code keeps serving. Kill the port
+before trusting a verify run (same trap noted during `feature/server-clocks`).
 
 ## Previously In Progress
 `feature/leaderboard-polish` — Leaderboard increments 2 + 3. DONE, verified 16/16.
@@ -293,9 +318,8 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Finish the hardening pass** — start Docker Desktop, then
-   `npx prisma migrate dev --name drop_redundant_indexes` and
-   `node frontend/scripts/verify-hardening.mjs`. Merge `feature/pre-inc2-hardening` → `dev`.
+1. **Merge `feature/pre-inc2-hardening` → `dev`.** Migration applied and
+   verification is 19/19; only the browser click-through (item 3) is outstanding.
 2. **Stockfish Inc 2** — the analysis worker: depth-18 analysis, move classification, storage,
    `POST /analysis/request` + `GET /analysis/:gameId`. Note the backend `stockfish/` module was
    **deleted** in the v1 scope cut, so this starts from nothing rather than from the old placeholder.
