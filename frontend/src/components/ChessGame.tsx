@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
+import useBoardFit from "../hooks/useBoardFit";
 import type {
   ClockSyncPayload,
   Color,
@@ -97,6 +98,9 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   const preMoveFenRef = useRef<string | null>(null);
 
   const getBestMove = useStockfish(difficulty !== null, difficulty ?? 3);
+  // The board fills the frame; everything else lives in the column beside it,
+  // which never needs less than this many pixels to stay readable.
+  const fit = useBoardFit(340);
 
   const stopClock = useCallback(() => {
     if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
@@ -354,8 +358,35 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   const canRematch = !!gameOver && !!players.black && players.black.id !== "computer";
 
   return (
-    <div className="flex flex-wrap gap-8 items-start justify-center w-full">
-      <div className="flex flex-col gap-4">
+    <div
+      ref={fit.ref}
+      className={`h-full w-full gap-6 ${
+        fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch"
+      }`}
+    >
+      {/* Board — left, as large as the frame allows */}
+      <div className="shrink-0 flex items-center" style={{ width: fit.size }}>
+        <Chessboard
+          position={fen}
+          boardWidth={fit.size}
+          onPieceDrop={onDrop}
+          boardOrientation={orientation}
+          isDraggablePiece={isDraggablePiece}
+          customLightSquareStyle={{ backgroundColor: LIGHT_SQ }}
+          customDarkSquareStyle={{ backgroundColor: DARK_SQ }}
+          customBoardStyle={BOARD_STYLE}
+          customSquareStyles={squareStyles}
+          customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px #ffffff" }}
+        />
+      </div>
+
+      {/* Everything else, to the right of the board. Opponent on top and you
+          at the bottom, so the panel keeps the board's own orientation. */}
+      <div
+        className={`flex flex-col gap-3 min-h-0 ${
+          fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0"
+        }`}
+      >
         <PlayerBar
           player={topPlayer}
           ms={topTimer}
@@ -363,19 +394,25 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
           urgent={topTimer < 30000 && !gameOver}
         />
 
-        {/* Board */}
-        <div style={{ width: "clamp(280px, 90vmin, 500px)" }}>
-          <Chessboard
-            position={fen}
-            onPieceDrop={onDrop}
-            boardOrientation={orientation}
-            isDraggablePiece={isDraggablePiece}
-            customLightSquareStyle={{ backgroundColor: LIGHT_SQ }}
-            customDarkSquareStyle={{ backgroundColor: DARK_SQ }}
-            customBoardStyle={BOARD_STYLE}
-            customSquareStyles={squareStyles}
-            customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px #ffffff" }}
-          />
+        {/* Move history takes the slack, and scrolls inside itself so a long
+            game never makes the page scroll. */}
+        <div className="card-b-flat flex-1 min-h-0 overflow-y-auto">
+          <h3 className="heading-b text-sm mb-3 border-b-[3px] border-ink pb-2">Moves</h3>
+          {moveHistory.length === 0 ? (
+            <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest">
+              Nothing yet
+            </p>
+          ) : (
+            <div className="text-sm font-mono space-y-0.5">
+              {Array.from({ length: Math.ceil(moveHistory.length / 2) }, (_, i) => (
+                <div key={i} className={`flex gap-2 px-1 ${i % 2 === 1 ? "bg-neutral-100" : ""}`}>
+                  <span className="text-neutral-400 w-6">{i + 1}.</span>
+                  <span className="font-bold w-14">{moveHistory[i * 2]}</span>
+                  {moveHistory[i * 2 + 1] && <span>{moveHistory[i * 2 + 1]}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <PlayerBar
@@ -441,26 +478,6 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         <p className="text-center text-xs font-bold uppercase tracking-widest text-neutral-500">
           {status}
         </p>
-      </div>
-
-      {/* Move history */}
-      <div className="card-b w-52 max-h-[500px] overflow-y-auto !p-4">
-        <h3 className="heading-b text-sm mb-3 border-b-[3px] border-ink pb-2">Moves</h3>
-        {moveHistory.length === 0 ? (
-          <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest">
-            Nothing yet
-          </p>
-        ) : (
-          <div className="text-sm font-mono space-y-0.5">
-            {Array.from({ length: Math.ceil(moveHistory.length / 2) }, (_, i) => (
-              <div key={i} className={`flex gap-2 px-1 ${i % 2 === 1 ? "bg-neutral-100" : ""}`}>
-                <span className="text-neutral-400 w-6">{i + 1}.</span>
-                <span className="font-bold w-14">{moveHistory[i * 2]}</span>
-                {moveHistory[i * 2 + 1] && <span>{moveHistory[i * 2 + 1]}</span>}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Game over modal */}

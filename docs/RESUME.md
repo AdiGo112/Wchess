@@ -81,7 +81,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 | AuthContext | `frontend/src/context/AuthContext.tsx` | ✅ | Token in memory (useRef), refreshToken in sessionStorage, silent restore |
 | SocketContext | `frontend/src/context/SocketContext.tsx` | ✅ | Refreshes the token on `connect_error`; surfaces gateway `error` events and `reconnect_failed` as toasts |
 | Login / Signup pages | `frontend/src/pages/` | ✅ | Signup has confirmPassword + field-level 409 errors; Login has `from` redirect |
-| ChessGame component | `frontend/src/components/ChessGame.tsx` | ✅ | Optimistic moves, auto-queen promotion, re-joins the room on reconnect, colour lock, draw split UI, rematch flow |
+| ChessGame component | `frontend/src/components/ChessGame.tsx` | ✅ | Optimistic moves, auto-queen promotion, re-joins the room on reconnect, colour lock, draw split UI, rematch flow. Board fills the frame on the left, clocks/moves/controls in a column to its right; the page does not scroll. |
 | Lobby / Matchmaking | `frontend/src/pages/Lobby.tsx` | ✅ | Quick match (live queue position) / friend challenge / vs-computer; `/challenge/:token` accept page |
 | Leaderboard page | `frontend/src/pages/Leaderboard.tsx` | ✅ | Variant tabs + period filter + own-rank row |
 | GameHistory page | `frontend/src/pages/GameHistory.tsx` | ✅ | Wired to `GET /games/history/:userId`; every row links into the review |
@@ -128,6 +128,7 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Socket + REST contracts | `frontend/src/types.ts` |
 | Docker services | `docker-compose.yml` |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
+| Board sizing (both board pages) | `frontend/src/hooks/useBoardFit.ts` |
 | Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-*.mjs` |
 | Engine copy script | `frontend/scripts/copy-engine.mjs` (runs on `predev`/`prebuild`; `public/engine/` is gitignored) |
 | Full API reference | `docs/architecture/api-reference.md` |

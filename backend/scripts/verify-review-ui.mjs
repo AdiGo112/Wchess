@@ -113,6 +113,29 @@ async function main() {
   check('the board does not overlap the side panel',
     !!overlap && overlap.boardRight <= overlap.panelLeft, JSON.stringify(overlap));
 
+  // The board is meant to fill the frame, sit on the left, and leave the page
+  // unscrollable. Before the layout pass it was capped at 500px and the page
+  // scrolled.
+  const frame = await page.evaluate(() => {
+    const board = document.querySelector('[data-boardid]').getBoundingClientRect();
+    const doc = document.documentElement;
+    const main = document.querySelector('main');
+    return {
+      board: Math.round(board.width),
+      left: Math.round(board.left),
+      vh: window.innerHeight,
+      vw: window.innerWidth,
+      pageScrolls: doc.scrollHeight > doc.clientHeight + 1,
+      mainScrolls: main ? main.scrollHeight > main.clientHeight + 1 : false,
+    };
+  });
+  check('the board fills the frame', frame.board > frame.vh * 0.6,
+    `${frame.board}px in a ${frame.vh}px viewport`);
+  check('the board sits on the left', frame.left < frame.vw * 0.25,
+    `left edge at ${frame.left} of ${frame.vw}`);
+  check('nothing scrolls', !frame.pageScrolls && !frame.mainScrolls,
+    `page=${frame.pageScrolls} main=${frame.mainScrolls}`);
+
   const body = () => page.locator('body').innerText();
   const beforeText = await body();
   check('every move is listed', MOVES.every((m) => beforeText.includes(m)),
