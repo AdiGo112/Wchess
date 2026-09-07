@@ -6,6 +6,10 @@
 ---
 
 ## Active Branch
+`feature/board-layout` — cut from `dev` on 2026-09-08 to rebuild the board
+pages around a full-height board. See **Currently In Progress** below.
+
+## Previous Branch
 `dev`. Three feature branches merged in on 2026-09-08:
 
 | Merge | Branch | What |
@@ -156,6 +160,39 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/board-layout` — **the board pages fill the screen and stop scrolling.**
+
+Asked for directly: the board was too small, the page scrolled, and the panels
+sat under and beside it. Now the board is as large as the frame allows, pinned
+left, with everything else in one column to its right — on the play page and the
+review page alike. On a 1080p screen the board went from a hard 500px cap to
+~900px.
+
+- `hooks/useBoardFit.ts` — one shared hook. A `ResizeObserver` on the row holding
+  the board and its panel; the board is the smaller of the row height and the
+  width left over after the panel, so it follows window resizes with no magic
+  offsets for the navbar or page padding. It reserves 14px for the 8px hard
+  offset shadow, which the frame edge was otherwise clipping — the one place
+  this design system shows depth.
+- **It uses a callback ref, not `useRef`.** The review page returns a loading
+  state first, so at effect time a plain ref was still null: the observer never
+  attached and the board sat at its 260px floor while the play page looked fine.
+  Fixed in the hook, so any future page with an early return is safe too.
+- `App.tsx` — the window itself no longer scrolls; `<main>` is the scroll
+  container. A page that fits the viewport scrolls nowhere at all, and every
+  other page scrolls inside the frame instead of moving it.
+- Long move lists scroll inside their own card, so the page never grows.
+- Below 1024px the board and panel stack and normal scrolling returns — a fixed
+  full-height layout on a phone is worse than a scrolling one.
+
+**Status: DONE, 22/22 in a real browser.** Three checks added to
+`verify-review-ui.mjs` guard the intent directly: the board is more than 60% of
+the viewport height, its left edge is in the left quarter, and neither the page
+nor `<main>` scrolls. Measured at 1920x1080 and 1366x768: board 904/592px on
+play, 883/571px on review, nothing scrolling at either size. 16/16 page walk
+still green.
+
+## Previously In Progress
 `feature/eco-openings` — **Analysis increment 3: ECO opening naming.** The last
 open piece of the analysis feature.
 

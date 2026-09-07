@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import api from "../api";
+import useBoardFit from "../hooks/useBoardFit";
 import type { AnalysedMove, AnalysisResponse, GameRecord, MoveClassification } from "../types";
 
 /* Same strict-mono board as the live game (design system: no hue anywhere). */
@@ -160,16 +161,8 @@ export default function GameReview() {
     return { [next.bestMove.slice(0, 2)]: ring, [next.bestMove.slice(2, 4)]: ring };
   }, [moves, ply]);
 
-  // react-chessboard v1.3 sizes itself from its parent exactly once and has no
-  // resize observer, so a percentage width lets it render at its 560px default
-  // and spill over the panel next to it. Drive the width explicitly instead.
-  const [boardSize, setBoardSize] = useState(480);
-  useEffect(() => {
-    const fit = () => setBoardSize(Math.max(260, Math.min(480, window.innerWidth - 48)));
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, []);
+  // The board fills the frame; the eval bar and the panel share what is left.
+  const fit = useBoardFit(400);
 
   const tally = useCallback(
     (color: "w" | "b") => {
@@ -205,97 +198,71 @@ export default function GameReview() {
   const running = analysis?.status !== "done";
 
   return (
-    <div className="max-w-6xl mx-auto py-4">
-      <h1 className="heading-b text-4xl md:text-5xl text-center mb-2">THE POST-MORTEM</h1>
-      <p className="text-center mb-8">
+    <div className="h-full flex flex-col gap-3">
+      {/* One compact line: every pixel spent here is a pixel off the board. */}
+      <div className="flex items-baseline gap-3 flex-wrap shrink-0">
+        <h1 className="heading-b text-2xl">THE POST-MORTEM</h1>
         <span className="tag-b">
           {game.whiteUsername} vs {game.blackUsername} · {game.moves.length} moves
         </span>
         {game.openingName && (
-          <span className="tag-b-inverse ml-2">
+          <span className="tag-b-inverse">
             {game.openingEco} {game.openingName}
           </span>
         )}
-      </p>
+        <Link to="/history" className="btn-b btn-b-sm ml-auto">
+          Back to history
+        </Link>
+      </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 justify-center items-start">
-        {/* Eval bar — White's share of the position, top to bottom. */}
-        <div className="hidden lg:flex flex-col items-center gap-2 pt-1">
-          <span className="font-mono text-xs font-bold">{running ? "··" : label}</span>
-          <div className="w-6 border-[3px] border-ink bg-ink relative" style={{ height: boardSize }}>
+      <div
+        ref={fit.ref}
+        className={`flex-1 min-h-0 gap-4 ${
+          fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch"
+        }`}
+      >
+        {/* Board — left, as large as the frame allows */}
+        <div className="shrink-0 flex items-center" style={{ width: fit.size }}>
+          <Chessboard
+            position={fens[ply]}
+            boardWidth={fit.size}
+            arePiecesDraggable={false}
+            // Instant, not animated: the move list and the arrow keys jump to
+            // arbitrary plies, and sliding a piece across the board to depict a
+            // jump from ply 30 back to ply 4 depicts something that never
+            // happened. It also makes holding an arrow key down usable.
+            animationDuration={0}
+            customLightSquareStyle={{ backgroundColor: LIGHT_SQ }}
+            customDarkSquareStyle={{ backgroundColor: DARK_SQ }}
+            customBoardStyle={BOARD_STYLE}
+            customSquareStyles={engineHint}
+          />
+        </div>
+
+        {/* Eval bar — White's share of the position, immediately right of the board */}
+        {!fit.stacked && (
+          <div className="shrink-0 flex flex-col items-center justify-center gap-2">
+            <span className="font-mono text-xs font-bold">{running ? "··" : label}</span>
             <div
-              className="absolute bottom-0 left-0 right-0 bg-white transition-[height] duration-200"
-              style={{ height: `${running ? 50 : share}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Board */}
-        <div className="flex flex-col gap-3">
-          <div style={{ width: boardSize }}>
-            <Chessboard
-              position={fens[ply]}
-              boardWidth={boardSize}
-              arePiecesDraggable={false}
-              // Instant, not animated: the move list and the arrow keys jump to
-              // arbitrary plies, and sliding a piece across the board to depict a
-              // jump from ply 30 back to ply 4 depicts something that never
-              // happened. It also makes holding an arrow key down usable.
-              animationDuration={0}
-              customLightSquareStyle={{ backgroundColor: LIGHT_SQ }}
-              customDarkSquareStyle={{ backgroundColor: DARK_SQ }}
-              customBoardStyle={BOARD_STYLE}
-              customSquareStyles={engineHint}
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button onClick={() => step(0)} className="btn-b btn-b-sm flex-1" aria-label="First move">
-              |◀
-            </button>
-            <button onClick={() => step(ply - 1)} className="btn-b btn-b-sm flex-1" aria-label="Previous move">
-              ◀
-            </button>
-            <span className="flex items-center justify-center font-mono text-xs font-bold w-20 border-[3px] border-ink">
-              {ply}/{totalPlies}
-            </span>
-            <button onClick={() => step(ply + 1)} className="btn-b btn-b-sm flex-1" aria-label="Next move">
-              ▶
-            </button>
-            <button onClick={() => step(totalPlies)} className="btn-b btn-b-sm flex-1" aria-label="Last move">
-              ▶|
-            </button>
-          </div>
-          <p className="text-center text-[10px] font-bold uppercase tracking-widest text-neutral-500">
-            ← → to step · Home / End for the ends
-            {Object.keys(engineHint).length > 0 && " · ringed = engine's move from here"}
-          </p>
-
-          {/* Verdict on the move now on the board */}
-          {current && (
-            <div className="card-b-flat">
-              <p className="font-mono font-bold text-lg">
-                {Math.ceil(current.ply / 2)}
-                {current.color === "w" ? "." : "..."} {current.san}
-                {MARK[current.classification]}
-              </p>
-              <p className="text-xs font-bold uppercase tracking-widest mt-1">
-                {current.classification.toLowerCase()} · {current.accuracy}% accurate
-                {current.cpLoss > 0 && ` · −${(current.cpLoss / 100).toFixed(2)} pawns`}
-              </p>
-              {current.bestMove && current.bestMove !== current.playedMove && (
-                <p className="text-xs font-mono text-neutral-500 mt-1">
-                  engine wanted {current.bestMove} instead
-                </p>
-              )}
+              className="w-6 border-[3px] border-ink bg-ink relative"
+              style={{ height: fit.size - 28 }}
+            >
+              <div
+                className="absolute bottom-0 left-0 right-0 bg-white transition-[height] duration-200"
+                style={{ height: `${running ? 50 : share}%` }}
+              />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Move list + accuracy */}
-        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
+        {/* Everything else, right of the board */}
+        <div
+          className={`flex flex-col gap-3 min-h-0 ${
+            fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0"
+          }`}
+        >
           {running ? (
-            <div className="card-b-flat text-center">
+            <div className="card-b-flat text-center shrink-0">
               {error ? (
                 <p className="text-xs font-bold uppercase tracking-widest">{error}</p>
               ) : (
@@ -311,12 +278,12 @@ export default function GameReview() {
               )}
             </div>
           ) : (
-            <div className="card-b-flat">
+            <div className="card-b-flat shrink-0">
               <h3 className="heading-b text-sm mb-3 border-b-[3px] border-ink pb-2">Accuracy</h3>
               <div className="flex gap-3">
                 {(["w", "b"] as const).map((color) => (
-                  <div key={color} className="flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1">
+                  <div key={color} className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 truncate">
                       {color === "w" ? game.whiteUsername : game.blackUsername}
                     </p>
                     <p className="font-mono font-bold text-2xl mb-2">
@@ -338,7 +305,9 @@ export default function GameReview() {
             </div>
           )}
 
-          <div className="card-b-flat max-h-[430px] overflow-y-auto">
+          {/* Move list takes the slack and scrolls inside itself, so a long game
+              never makes the page scroll. */}
+          <div className="card-b-flat flex-1 min-h-0 overflow-y-auto">
             <h3 className="heading-b text-sm mb-3 border-b-[3px] border-ink pb-2">Moves</h3>
             <div className="text-sm font-mono">
               {Array.from({ length: Math.ceil(totalPlies / 2) }, (_, i) => (
@@ -366,9 +335,50 @@ export default function GameReview() {
             </div>
           </div>
 
-          <Link to="/history" className="btn-b btn-b-sm text-center">
-            Back to history
-          </Link>
+          {/* Verdict on the move now on the board */}
+          {current && (
+            <div className="card-b-flat shrink-0">
+              <p className="font-mono font-bold text-lg">
+                {Math.ceil(current.ply / 2)}
+                {current.color === "w" ? "." : "..."} {current.san}
+                {MARK[current.classification]}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-widest mt-1">
+                {current.classification.toLowerCase()} · {current.accuracy}% accurate
+                {current.cpLoss > 0 && ` · −${(current.cpLoss / 100).toFixed(2)} pawns`}
+              </p>
+              {current.bestMove && current.bestMove !== current.playedMove && (
+                <p className="text-xs font-mono text-neutral-500 mt-1">
+                  engine wanted {current.bestMove} instead
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Transport */}
+          <div className="shrink-0 flex flex-col gap-1">
+            <div className="flex gap-2">
+              <button onClick={() => step(0)} className="btn-b btn-b-sm flex-1" aria-label="First move">
+                |◀
+              </button>
+              <button onClick={() => step(ply - 1)} className="btn-b btn-b-sm flex-1" aria-label="Previous move">
+                ◀
+              </button>
+              <span className="flex items-center justify-center font-mono text-xs font-bold w-20 border-[3px] border-ink">
+                {ply}/{totalPlies}
+              </span>
+              <button onClick={() => step(ply + 1)} className="btn-b btn-b-sm flex-1" aria-label="Next move">
+                ▶
+              </button>
+              <button onClick={() => step(totalPlies)} className="btn-b btn-b-sm flex-1" aria-label="Last move">
+                ▶|
+              </button>
+            </div>
+            <p className="text-center text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+              ← → to step · Home / End for the ends
+              {Object.keys(engineHint).length > 0 && " · ringed = engine's move from here"}
+            </p>
+          </div>
         </div>
       </div>
     </div>

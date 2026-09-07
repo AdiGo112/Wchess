@@ -26,8 +26,10 @@ export default function Game() {
     if (!roomId) navigate("/lobby", { replace: true });
   }, [roomId, navigate]);
 
+  // Full-bleed: the negative margins cancel <main>'s padding and the height adds
+  // it back, so the page is exactly the frame and never scrolls.
   return (
-    <div className="-mx-4 -my-8 min-h-screen flex flex-col">
+    <div className="-mx-4 -my-8 h-[calc(100%+4rem)] flex flex-col overflow-hidden">
       {/* Game header strip */}
       <div className="w-full flex justify-between items-center px-6 py-3 bg-ink text-white border-b-[3px] border-ink">
         <h2 className="font-display text-lg tracking-tight">WCHESS</h2>
@@ -47,11 +49,11 @@ export default function Game() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 bg-paper">
+      <div className="flex-1 min-h-0 flex p-4 bg-paper">
         {roomId ? (
           <ChessGame key={roomId} roomId={roomId} mode={mode} timeControl={timeControl} />
         ) : (
-          <div className="text-center">
+          <div className="m-auto text-center">
             <div className="loader-b mx-auto mb-4" />
             <p className="text-xs font-bold uppercase tracking-widest">
               Waiting for an opponent<span className="animate-blink">_</span>

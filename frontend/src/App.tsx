@@ -18,9 +18,12 @@ import Tournaments from "./pages/Tournaments";
 import ProfileEdit from "./pages/ProfileEdit";
 import NotFound from "./pages/NotFound";
 
+// The window itself never scrolls: <main> is the scroll container, so a page
+// that fits the viewport (the board pages) scrolls nowhere at all, and every
+// other page scrolls inside the frame instead of moving it.
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Brutal toasts: square, bordered, uppercase. No colored success/error
           variants — the message text carries the meaning (strict mono). */}
       <Toaster
@@ -43,7 +46,7 @@ export default function App() {
         }}
       />
       <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <main className="flex-1 min-h-0 overflow-y-auto container mx-auto px-4 py-8">
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<Home />} />
