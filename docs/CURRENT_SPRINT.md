@@ -10,15 +10,15 @@
 
 | Merge | Branch | What |
 |---|---|---|
-| `9e6b300` | `feature/stockfish-inc2` | Stockfish Inc 2 — server-side post-game analysis |
-| `ef0f782` | `feature/analysis-ui` | Analysis Inc 4 + 5 — the game review page |
-| `b215306` | `feature/eco-openings` | Analysis Inc 3 — ECO opening naming |
+| `8e70b4e` | `feature/stockfish-inc2` | Stockfish Inc 2 — server-side post-game analysis |
+| `0cc913c` | `feature/analysis-ui` | Analysis Inc 4 + 5 — the game review page |
+| `480be75` | `feature/eco-openings` | Analysis Inc 3 — ECO opening naming |
 
 **Nothing is pushed.** `origin/dev` is still at the pre-Increment-2 hardening merge,
 and `staging` and `main` are further behind. Next feature branch should be cut from
 `dev`.
 
-`dev` — `feature/stockfish-inc2` merged in as `9e6b300` (2026-09-07): Stockfish
+`dev` — `feature/stockfish-inc2` merged in as `8e70b4e` (2026-09-07): Stockfish
 Increment 2, server-side post-game analysis. Not pushed yet.
 
 ## Previous Branch
