@@ -6,12 +6,17 @@
 ---
 
 ## Active Branch
-`feature/eco-openings` — cut from `dev` on 2026-09-08 for Analysis increment 3
-(ECO opening naming). See **Currently In Progress** below.
+`dev`. Three feature branches merged in on 2026-09-08:
 
-## Previous Branches
-`dev` — `feature/analysis-ui` merged in as `ef0f782` (2026-09-08): the game review
-page, Analysis increments 4 + 5.
+| Merge | Branch | What |
+|---|---|---|
+| `9e6b300` | `feature/stockfish-inc2` | Stockfish Inc 2 — server-side post-game analysis |
+| `ef0f782` | `feature/analysis-ui` | Analysis Inc 4 + 5 — the game review page |
+| `b215306` | `feature/eco-openings` | Analysis Inc 3 — ECO opening naming |
+
+**Nothing is pushed.** `origin/dev` is still at the pre-Increment-2 hardening merge,
+and `staging` and `main` are further behind. Next feature branch should be cut from
+`dev`.
 
 `dev` — `feature/stockfish-inc2` merged in as `9e6b300` (2026-09-07): Stockfish
 Increment 2, server-side post-game analysis. Not pushed yet.
@@ -482,9 +487,9 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Merge `feature/eco-openings` → `dev`.** Then `dev` → `staging` → `main`:
-   nothing has been pushed since the pre-Increment-2 hardening merge, and there are
-   now five feature merges sitting on `dev` locally.
+1. **Push, then `dev` → `staging` → `main`.** Nothing has been pushed since the
+   pre-Increment-2 hardening merge; three feature merges are sitting on `dev`
+   locally.
 2. **Decide whether Playwright becomes a real devDependency.** It is installed
    unsaved right now, which means the two browser scripts only run for whoever
    installs it by hand. The optimistic-move and rematch paths still have no browser
