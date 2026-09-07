@@ -76,8 +76,8 @@ model Game {
   fen             String?     // final position FEN
   moves           String[]    // SAN array ["e4","e5",...]
   duration        Int?        // actual game seconds
-  openingEco      String?
-  openingName     String?
+  openingEco      String?     // "C20", filled at save from the SAN list
+  openingName     String?     // "King's Pawn Game"; null on games saved before 2026-09-08
   tournamentId    String?
   createdAt       DateTime    @default(now())
 }

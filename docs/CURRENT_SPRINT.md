@@ -6,10 +6,13 @@
 ---
 
 ## Active Branch
-`feature/analysis-ui` — cut from `dev` on 2026-09-08 for Analysis increments 4 + 5
-(the review page). See **Currently In Progress** below.
+`feature/eco-openings` — cut from `dev` on 2026-09-08 for Analysis increment 3
+(ECO opening naming). See **Currently In Progress** below.
 
-## Previous Branch
+## Previous Branches
+`dev` — `feature/analysis-ui` merged in as `ef0f782` (2026-09-08): the game review
+page, Analysis increments 4 + 5.
+
 `dev` — `feature/stockfish-inc2` merged in as `9e6b300` (2026-09-07): Stockfish
 Increment 2, server-side post-game analysis. Not pushed yet.
 
@@ -148,6 +151,35 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/eco-openings` — **Analysis increment 3: ECO opening naming.** The last
+open piece of the analysis feature.
+
+`Game.openingEco` and `Game.openingName` have been columns with nothing writing
+them since the initial schema — the third instance of that shape in this repo,
+after `Game.pgn` and the `@@index` duplicates the hardening pass removed.
+
+- `backend/src/games/openings.ts` — longest-prefix match of the SAN move list
+  against a static table, filled in `saveCompletedGame` (the only place a finished
+  game is written, so the only place it can be filled) and emitted as standard
+  `[ECO]` / `[Opening]` PGN tags, so an exported game names itself in any viewer.
+- **Main lines only, on purpose.** The full ECO list is ~3000 transpositions this
+  codebase has no other use for, and every extra entry only refines a label. Because
+  the match falls back to the nearest shorter prefix, an unlisted line still reads
+  "Sicilian Defence" rather than nothing: a shallow table degrades to vaguer, never
+  to wrong. Dropping in a full table later is a data change; the matcher does not
+  move.
+- Shown on the review page header and on every game-history row.
+
+**Not backfilled.** Games saved before 2026-09-08 keep a null opening. Filling them
+would mean a write on a read path or a migration script, for a cosmetic label on
+games nobody is looking at.
+
+**Status: DONE.** 6 unit tests in `openings.spec.ts` (longest match wins, stays
+named once the game leaves the book, no match for an irregular opening) and 3 live
+checks folded into `verify-hardening.mjs` (E1: both columns written, `[ECO "C20"]`
+and `[Opening]` in the PGN of a real socket game). Both builds clean, 20/20 unit.
+
+## Previously In Progress
 `feature/analysis-ui` — **Analysis increments 4 + 5: the game review page.**
 
 Cut from `dev` on 2026-09-08. Increment 2 left working endpoints that nothing
@@ -450,17 +482,19 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Merge `feature/analysis-ui` → `dev`.** 19/19 review UI, 16/16 page walk,
-   both builds clean.
-2. **Analysis Inc 3 — ECO opening naming.** The last open piece of the analysis
-   feature: longest-prefix match of the move list against a static ECO table, into
-   the `openingEco` / `openingName` columns that already exist on `Game` and have
-   never been written. Small and self-contained.
-3. **Decide whether Playwright becomes a real devDependency.** It is installed
+1. **Merge `feature/eco-openings` → `dev`.** Then `dev` → `staging` → `main`:
+   nothing has been pushed since the pre-Increment-2 hardening merge, and there are
+   now five feature merges sitting on `dev` locally.
+2. **Decide whether Playwright becomes a real devDependency.** It is installed
    unsaved right now, which means the two browser scripts only run for whoever
    installs it by hand. The optimistic-move and rematch paths still have no browser
    coverage — they need two sockets in two contexts, which is a bigger script than
    the walk-through.
+3. **Nothing else is queued.** All twelve v1 increments that ADR-0032 kept are
+   done. What remains is the deferred set (chat, notifications, puzzles,
+   tournaments, social, spectate) and Frontend UI increments 1-6 — Zustand, React
+   Query, sound, board themes, dark mode, mobile/a11y. See `docs/FUTURE_SCOPE.md`
+   and pick, rather than assuming an order.
 
 ## Branch Order (full sequence)
 ```
