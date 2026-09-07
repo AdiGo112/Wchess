@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Signup from "./pages/Signup";
 import GameHistory from "./pages/GameHistory";
+import GameReview from "./pages/GameReview";
 import PlayerList from "./components/PlayerList";
 import Leaderboard from "./pages/Leaderboard";
 import Puzzles from "./pages/Puzzles";
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/edit" element={<ProfileEdit />} />
             <Route path="/history" element={<GameHistory />} />
+            <Route path="/review/:gameId" element={<GameReview />} />
           </Route>
 
           {/* Anything else — a typo or a stale bookmark — rendered a blank

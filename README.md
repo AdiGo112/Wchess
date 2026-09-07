@@ -78,6 +78,11 @@ node frontend/scripts/verify-leaderboard.mjs   # period boards, 16/16
 node frontend/scripts/verify-join-authz.mjs    # join_room authz, 2/2
 node frontend/scripts/verify-hardening.mjs     # pre-Inc-2 hardening pass
 node backend/scripts/verify-analysis.mjs      # post-game analysis, 14/14
+
+# Browser checks. Playwright is deliberately NOT a dependency — install it unsaved:
+#   cd backend && npm install --no-save playwright && npx playwright install chromium
+node backend/scripts/verify-pages.mjs        # every route renders, 16/16
+node backend/scripts/verify-review-ui.mjs    # the review page end to end, 19/19
 ```
 
 ---
@@ -122,8 +127,8 @@ WChess/
 - Computer opponent — Stockfish WASM in the player's own browser, 5 difficulties (ADR-0009)
 - Leaderboards (all-time / weekly / monthly) via Redis sorted sets, 60s read cache
 - Game history with PGN export
-- Post-game analysis — depth-18 sweep, per-move classification, per-player accuracy
-  (API only; no UI yet)
+- Post-game analysis — depth-18 sweep, per-move classification, per-player accuracy,
+  and a review board at `/review/:gameId` with an eval bar and an annotated move list
 - Monochrome neo-brutalist UI
 
 ## Deferred (ADR-0032)

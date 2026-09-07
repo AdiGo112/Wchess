@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import toast from "react-hot-toast";
@@ -509,6 +509,13 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
                 <button onClick={handleRematch} className="btn-b btn-b-primary">
                   Accept rematch
                 </button>
+              )}
+              {/* Only rated games are persisted, so only they have something to
+                  review — vs-computer rooms never produce a Game row. */}
+              {gameOver.gameId && (
+                <Link to={`/review/${gameOver.gameId}`} className="btn-b">
+                  Review
+                </Link>
               )}
               <button onClick={() => navigate("/")} className="btn-b">
                 Home

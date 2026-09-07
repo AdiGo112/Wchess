@@ -6,9 +6,12 @@
 ---
 
 ## Active Branch
+`feature/analysis-ui` — cut from `dev` on 2026-09-08 for Analysis increments 4 + 5
+(the review page). See **Currently In Progress** below.
+
+## Previous Branch
 `dev` — `feature/stockfish-inc2` merged in as `9e6b300` (2026-09-07): Stockfish
-Increment 2, server-side post-game analysis. See **Currently In Progress** below.
-Not pushed yet. Next feature branch should be cut from `dev`.
+Increment 2, server-side post-game analysis. Not pushed yet.
 
 ## Previous Branch
 `dev` — `feature/v1-scope-cut` merged in as `31b6e87` (2026-07-19) and pushed. The merge
@@ -145,6 +148,63 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/analysis-ui` — **Analysis increments 4 + 5: the game review page.**
+
+Cut from `dev` on 2026-09-08. Increment 2 left working endpoints that nothing
+called; this is the half a player can see.
+
+**What shipped**
+- `frontend/src/pages/GameReview.tsx` at `/review/:gameId` — eval bar, a board
+  replayed from the stored SAN list, arrow keys / buttons / a clickable move list,
+  `?!` `?` `??` annotation in standard chess notation (a good move gets no mark),
+  a verdict card for the move on the board, and per-player accuracy with a
+  classification tally.
+- **Opening the review queues the sweep** — increment 5's "auto-trigger". The user
+  navigated here on purpose; a button to press first would be ceremony. The page
+  polls every 2s and fills in when the analysis lands.
+- Links in from every game-history row and from the game-over modal. That needed a
+  backend line: `game_over` now carries the persisted `gameId` (null for
+  vs-computer games, which are never saved), so the modal has something to link to.
+- Accuracy is a **panel, not a modal**. A modal you have to dismiss to reach the
+  board it is describing is the wrong shape.
+
+**Two library defects found by looking at the rendered page, not the types.**
+- The board overlapped the accuracy panel. `react-chessboard` v1.3 measures its
+  parent once and has no resize observer, so a percentage width leaves it at its
+  560px default; `boardWidth` is now driven explicitly. The live game board has the
+  same latent issue and gets away with it because its move panel is narrow enough.
+- The engine's suggested move was drawn with `customArrows` — and rendered in
+  react-chessboard's default orange, in a design system that has no orange, because
+  the per-arrow colour element is ignored. Worse, the library clears arrow state
+  from a timeout tied to the piece animation, so on a board driven entirely by
+  external position changes the arrow vanished a few hundred ms after every step.
+  Replaced with inset square rings via `customSquareStyles`: a plain prop that
+  survives, and it matches how the live board already marks squares. Animation is
+  off (`animationDuration={0}`) — sliding a piece to depict a jump from ply 30 back
+  to ply 4 depicts something that never happened.
+
+**Status: DONE, 19/19 in a real browser** (`backend/scripts/verify-review-ui.mjs`).
+Both builds clean.
+
+**Playwright now runs here, and item 3 is closed.** It is deliberately *not* a
+dependency — both browser scripts document the unsaved install
+(`npm install --no-save playwright && npx playwright install chromium`). With it:
+- `verify-review-ui.mjs` — 19/19. Logs in through the real form, follows a history
+  row into the review, waits out a live sweep, and asserts the board agrees with the
+  ply counter square by square (the queen leaves h5 for f7 and comes back), the
+  blunder is marked `Nf6??`, the mating move is not marked, the hint rings land on
+  g7-g6, and nothing renders in the library's default orange.
+- `verify-pages.mjs` — 16/16. Every route, logged out and logged in, asserting each
+  one drew its own content rather than a blank page under the navbar — measured on
+  `<main>`, since a blank page still has a navbar. That is the exact failure the
+  hardening pass found twice (`/players`, `/profile/edit`). Zero console errors on
+  any route.
+
+Two of the failures in those runs were the *scripts* being wrong, not the app: f7
+holds Black's pawn until the queen takes it, and the leaderboard's heading is "THE
+FOOD CHAIN", not the word "leaderboard".
+
+## Previously In Progress
 `feature/stockfish-inc2` — **Stockfish Increment 2: server-side post-game analysis.**
 
 Cut from `dev` on 2026-09-07. The backend `stockfish/` module was deleted in the v1
@@ -390,15 +450,17 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Analysis Inc 4 + 5 — the frontend.** The endpoints exist and nothing calls
-   them: a game review board (step through moves, eval bar off `evalCp`,
-   classification badges) and a post-game accuracy panel linking into it. Inc 1
-   and 2 of that feature are already delivered; Inc 3 (ECO opening lookup) is
-   independent and small.
-2. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
-   only by the production build + the verified socket contracts. The hardening pass added several
-   UI changes (optimistic moves, rematch, Profile, `/players`, 404) that have never rendered in a
-   real browser, and the analysis UI above will add more.
+1. **Merge `feature/analysis-ui` → `dev`.** 19/19 review UI, 16/16 page walk,
+   both builds clean.
+2. **Analysis Inc 3 — ECO opening naming.** The last open piece of the analysis
+   feature: longest-prefix match of the move list against a static ECO table, into
+   the `openingEco` / `openingName` columns that already exist on `Game` and have
+   never been written. Small and self-contained.
+3. **Decide whether Playwright becomes a real devDependency.** It is installed
+   unsaved right now, which means the two browser scripts only run for whoever
+   installs it by hand. The optimistic-move and rematch paths still have no browser
+   coverage — they need two sockets in two contexts, which is a bigger script than
+   the walk-through.
 
 ## Branch Order (full sequence)
 ```

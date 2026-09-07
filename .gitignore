@@ -16,3 +16,7 @@ dist/
 # docs/
 .claude/
 temp_*.md
+
+# Verification screenshots — artifacts of a run, not source
+backend/scripts/*.png
+
