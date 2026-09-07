@@ -6,6 +6,10 @@
 ---
 
 ## Active Branch
+`feature/stockfish-inc2` — cut from `dev` on 2026-09-07 for Stockfish Increment 2
+(server-side post-game analysis). See **Currently In Progress** below.
+
+## Previous Branch
 `dev` — `feature/v1-scope-cut` merged in as `31b6e87` (2026-07-19) and pushed. The merge
 carried `d3bfa1a` (stockfish WASM) too, since the feature branch was cut from it.
 Verified pre-push: backend `tsc` clean, frontend build clean, and the full stack was
@@ -16,7 +20,7 @@ Also on dev now: `62593c5` monochrome neo-brutalist UI redesign, `2cb3a8d` brand
 ChessWeb → WChess (user-facing strings only; note the GitHub remote was already named
 `Wchess`).
 
-## Done on this branch
+## Done on `dev`
 - `62593c5` — **Full UI redesign: monochrome neo-brutalism.** Black/white/greys only,
   3px borders, hard offset shadows, Archivo Black + Space Grotesk + Space Mono
   (Google Fonts in `index.html`). Design tokens in `tailwind.config.js`, reusable
@@ -140,6 +144,73 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/stockfish-inc2` — **Stockfish Increment 2: server-side post-game analysis.**
+
+Cut from `dev` on 2026-09-07. The backend `stockfish/` module was deleted in the v1
+scope cut, so this started from nothing rather than from the old placeholder.
+
+**How the server gets an engine — the open question Inc 2 had to answer.** It runs
+the *same* `stockfish-18-lite-single` WASM build the browser already uses, as a
+**child process** speaking plain UCI over stdio. Two things were tried first:
+
+- In-process was never an option. A depth-18 sweep of an 80-ply game is ~47s of
+  solid CPU, and on a single-instance monolith (ADR-0032) that stalls every socket
+  and every request for the duration.
+- A `worker_threads` worker was written, and **failed at runtime**: the engine’s
+  emscripten build claims `worker_threads` for its own pthread plumbing, so inside
+  a Worker it never assigns `module.exports` and `initEngine` throws "Could not load
+  the engine correctly." `typeof require(engine)` is `function` on the main thread
+  and `object` in a Worker. A child process is both immune to that and a cleaner
+  CPU boundary, and it deleted a file and a custom message protocol.
+
+No BullMQ. Bull went with ADR-0032, and the queue here is a promise chain over one
+engine: one sweep at a time, at most 3 games waiting, 503 past that. Redis is not
+involved — restarting the server just means the next POST restarts the sweep, which
+is strictly better than a `RUNNING` row stuck in Postgres.
+
+**What shipped**
+- `backend/src/analysis/` — `classify.ts` (pure scoring), `analysis.service.ts`
+  (engine + queue + sweep), controller, module. `POST /analysis/:gameId` (authed —
+  the only route that costs real CPU) queues and returns immediately;
+  `GET /analysis/:gameId` (public, like `GET /games/:id`) returns
+  `done` / `running` / `none`.
+- **N+1 evaluations for N moves**, not 2N: the position after move i is the position
+  before move i+1, so every eval is read by two moves. That halves the sweep.
+- `GameAnalysis` table (one row per game, `ON DELETE CASCADE`), migration
+  `20260907180922_add_game_analysis` — one `CREATE TABLE` plus its FK, nothing else.
+  Analysis is computed once and kept: same moves, same depth, same numbers, so a
+  second viewer costs no engine time.
+- Classification on clamped centipawn loss (BEST / EXCELLENT <20 / GOOD <50 /
+  INACCURACY <100 / MISTAKE <250 / BLUNDER) and Lichess-formula accuracy. Evals are
+  clamped to ±1000 first, so going from +25 pawns to +12 is not a blunder.
+
+**Status: DONE, 14/14 live** (`backend/scripts/verify-analysis.mjs`) and 14/14 unit
+(`classify.spec.ts` — the first `.spec.ts` in a repo that had Jest configured and
+zero tests). `tsc --noEmit` + `nest build` clean.
+
+- Morphy’s Opera Game: 33 plies in 21s, White 98.2% vs Black 89.1%, worst loss
+  W 34cp / B 203cp, `Rd8#` scored BEST.
+- An 80-ply game in 47.5s — inside the increment’s 120s budget — while unrelated
+  API requests stayed at **10ms**, which is the whole reason the engine is out of
+  process.
+- A second POST on an analysed game returns the stored row in 4ms.
+
+**One bug that only the live run could show.** `mate: 0` — "the side to move is
+checkmated" — is a fixed point under negation, so flipping it to the mating
+player’s point of view left it reading as a total loss. The checkmating move came
+back as the game’s worst blunder and cost White ~6 accuracy points (92.4 → 98.2
+after the fix). Pure unit tests never saw it because it only appears where the
+terminal position meets the point-of-view flip. `invert()` now writes that case out
+explicitly, and both suites guard it.
+
+**Also corrected while here:** `docs/architecture/database-schema.md` still
+documented a whole MongoDB section — including an `Analysis` *collection* — plus
+five BullMQ queues, `spectators`, and four Redis keys no code ever wrote. Mongo and
+Bull have been gone since 2026-07-19. Same class of doc-vs-code contradiction as
+ADR-0004 and ADR-0009; corrected rather than left next to a real `GameAnalysis`
+table.
+
+## Previously In Progress
 `feature/pre-inc2-hardening` — close every known defect before Stockfish Inc 2.
 
 Cut from `dev` on 2026-08-16. Both compilers were already clean, so everything
@@ -318,18 +389,17 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Merge `feature/pre-inc2-hardening` → `dev`.** Migration applied and
-   verification is 19/19; only the browser click-through (item 3) is outstanding.
-2. **Stockfish Inc 2** — the analysis worker: depth-18 analysis, move classification, storage,
-   `POST /analysis/request` + `GET /analysis/:gameId`. Note the backend `stockfish/` module was
-   **deleted** in the v1 scope cut, so this starts from nothing rather than from the old placeholder.
-   Inc 2 has to decide how the server gets an engine (spawn a native binary, or run the same WASM under
-   Node — the WASM build already works headless, which is how the computer-move path was verified).
-   Storage is Postgres now, not MongoDB — Mongo is gone.
+1. **Merge `feature/stockfish-inc2` → `dev`.** Migration applied, 14/14 live,
+   14/14 unit, both builds clean.
+2. **Analysis Inc 4 + 5 — the frontend.** The endpoints exist and nothing calls
+   them: a game review board (step through moves, eval bar off `evalCp`,
+   classification badges) and a post-game accuracy panel linking into it. Inc 1
+   and 2 of that feature are already delivered by this branch; Inc 3 (ECO opening
+   lookup) is independent and small.
 3. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
    only by the production build + the verified socket contracts. The hardening pass added several
    UI changes (optimistic moves, rematch, Profile, `/players`, 404) that have never rendered in a
-   real browser.
+   real browser, and the analysis UI above will add more.
 
 ## Branch Order (full sequence)
 ```
