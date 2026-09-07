@@ -6,10 +6,13 @@ Swagger UI: `http://localhost:3100/api/docs`
 All protected routes require: `Authorization: Bearer <accessToken>`
 
 > **Scope.** This file documents the endpoints that exist in `backend/src` today.
-> Chat, notifications, puzzles, tournaments, social, analysis and media were cut
-> from v1 by ADR-0032 and their modules deleted — their endpoint tables have been
-> removed from this file rather than left looking live. See `docs/FUTURE_SCOPE.md`
-> for what returns and when.
+> Chat, notifications, puzzles, tournaments, social and media were cut from v1 by
+> ADR-0032 and their modules deleted — their endpoint tables have been removed
+> from this file rather than left looking live. See `docs/FUTURE_SCOPE.md` for
+> what returns and when.
+>
+> **Analysis is back**, built fresh in Stockfish Increment 2 rather than restored
+> from the deleted module.
 
 ---
 
@@ -86,6 +89,52 @@ by the global `ValidationPipe` (`whitelist: true`).
 
 ---
 
+## Analysis
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/analysis/:gameId` | ✓ | Queue a depth-18 sweep of a finished game. Returns immediately: `{ status: "running", gameId }`, or the stored row with `status: "done"` if it was already analysed. Errors: 404 game not found / no moves, 503 over 300 plies or the queue is full |
+| GET | `/analysis/:gameId` | — | `{ status: "done" | "running" | "none", ... }`. When done, the full row: `depth`, `engine`, `accuracyWhite`, `accuracyBlack`, `moves[]`, `createdAt` |
+
+POST is authed because it is the only route on this server that costs real CPU;
+GET is public, like `GET /games/:id`. Poll GET after POST — a sweep of a full
+game takes tens of seconds, well past any sane HTTP timeout.
+
+One `moves[]` entry per ply:
+
+```json
+{
+  "ply": 20,
+  "san": "cxb5",
+  "color": "b",
+  "evalCp": 203,
+  "mate": null,
+  "bestMove": "d8b6",
+  "playedMove": "c6b5",
+  "cpLoss": 203,
+  "accuracy": 41.2,
+  "classification": "MISTAKE"
+}
+```
+
+- `evalCp` / `mate` are **after** the move, always from **White's** point of view
+  (`+` = White better). `evalCp` of `±10000` with a null `mate` means checkmate on
+  the board.
+- `bestMove` is the engine's pick in the position **before** the move, in UCI, so
+  `bestMove === playedMove` is exactly what makes a move `BEST`.
+- `cpLoss` clamps both evaluations to ±1000 first, so trading +25 pawns down to
+  +12 is not scored as a blunder.
+- `classification`: `BEST` / `EXCELLENT` (<20cp) / `GOOD` (<50) / `INACCURACY`
+  (<100) / `MISTAKE` (<250) / `BLUNDER`.
+- `accuracy` per move and the two per-player figures use the Lichess win%
+  formula.
+
+Results are stored once and reused: the same moves at the same depth always
+score the same, so a second viewer of a game review costs no engine time. One
+game is analysed at a time and at most 3 wait in line; the engine is Stockfish 18
+lite WASM in a **child process**, so a sweep never blocks the API or the sockets.
+
+---
 ## Leaderboard
 
 | Method | Path | Auth | Description |

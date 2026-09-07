@@ -52,7 +52,7 @@ Unauthenticated connections are rejected immediately.
 | `game_start` | `{ roomId, white, black, fen, timeControl, increment, timers, difficulty? }` | Game begins. `difficulty` (1–5) is present only for vs-computer rooms; the client uses it to set the WASM engine's skill level. `black.id === 'computer'` is how the client recognizes a computer game. |
 | `game_state` | `{ roomId, white, black, fen, timers, moves, drawOfferedBy, difficulty? }` | Full state — sent to a reconnecting player, and to a non-player who joins to observe (same `difficulty` semantics as `game_start`, so the engine resumes after a refresh) |
 | `move_made` | `{ move: MoveDto, fen, turn, timers, check, drawOfferedBy? }` | Move applied. Authoritative — the client applies moves optimistically and reconciles against this. |
-| `game_over` | `{ result, reason, ratingChange: { white, black } }` | Game ended. Rating changes ship **inside this event**; there is no separate `rating_update`. |
+| `game_over` | `{ roomId, gameId, result, reason, ratingChange: { white, black } }` | Game ended. Rating changes ship **inside this event**; there is no separate `rating_update`. `gameId` is the persisted `Game` row, so the client can link straight into `/review/:gameId`; it is `null` on vs-computer games, which are never saved. |
 | `draw_offered` | `{ byColor }` | Opponent offered draw |
 | `draw_declined` | `{}` | Draw offer declined |
 | `opponent_disconnected` | `{ roomId, grace: number }` | Opponent left (`grace` in **ms**; 60000). They forfeit if not back in time. |

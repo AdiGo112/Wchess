@@ -8,6 +8,7 @@
 //   C2  GET /users/:username/stats returns what Profile renders
 //   D1  pipelined leaderboard writes still populate all/week/month
 //   D8  Game.pgn is written instead of staying ""
+//   E1  Game.openingEco / openingName are written too (Analysis increment 3)
 //
 // Run against a live stack: docker compose up -d, backend on :3100.
 import { io } from "socket.io-client";
@@ -181,6 +182,15 @@ await sleep(500); // let saveCompletedGame + pipelined ZADDs settle
   check("D8 Game.pgn is non-empty", pgn.length > 0, pgn.slice(0, 60));
   check("D8 PGN contains the played moves", pgn.includes("e4") && pgn.includes("e5"), pgn.slice(0, 80));
   check("D8 PGN carries a Result tag", pgn.includes("[Result "), pgn.slice(0, 60));
+
+  // E1: the third dead column. 1.e4 e5 is C20; the table degrades to the
+  // shortest matching line rather than to nothing, so this is the real answer
+  // for a two-move game, not a placeholder.
+  check("E1 Game.openingEco is written", game?.openingEco === "C20", String(game?.openingEco));
+  check("E1 Game.openingName is written", game?.openingName === "King's Pawn Game", String(game?.openingName));
+  check("E1 PGN carries ECO and Opening tags",
+    pgn.includes('[ECO "C20"]') && pgn.includes("[Opening "),
+    (pgn.match(/\[(ECO|Opening) [^\]]*\]/g) || []).join(" "));
 }
 
 // ── D1: pipelined leaderboard writes still land on all three boards ─────────

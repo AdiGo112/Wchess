@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { updateGlicko2, variantFromTimeControl } from '../common/utils/elo';
+import { identifyOpening } from './openings';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 
 export interface ActiveRoom {
@@ -170,6 +171,7 @@ export class GamesService {
   private buildPgn(
     room: ActiveRoom,
     result: 'WHITE' | 'BLACK' | 'DRAW' | 'ABORTED',
+    opening: { eco: string; name: string } | null,
   ): string {
     const chess = new Chess();
     for (const san of room.moves) {
@@ -195,6 +197,10 @@ export class GamesService {
       'TimeControl', `${room.timeControl}+${room.increment}`,
       'Result', outcome,
     );
+
+    // ECO and Opening are standard PGN tags, so an exported game names itself
+    // in any viewer rather than only inside this app.
+    if (opening) chess.header('ECO', opening.eco, 'Opening', opening.name);
 
     return chess.pgn();
   }
@@ -233,7 +239,11 @@ export class GamesService {
     const blackDiff = newBlack.rating - bR.rating;
 
     const duration = Math.round((Date.now() - room.startedAt) / 1000);
-    const pgn = this.buildPgn(room, result);
+    // Analysis increment 3. openingEco/openingName have been columns with no
+    // producer since the initial schema; this is the only place a finished game
+    // is written, so it is the only place they can be filled.
+    const opening = identifyOpening(room.moves);
+    const pgn = this.buildPgn(room, result, opening);
 
     const createGame = this.prisma.game.create({
       data: {
@@ -254,6 +264,8 @@ export class GamesService {
         fen: room.fen,
         pgn,
         duration,
+        openingEco: opening?.eco ?? null,
+        openingName: opening?.name ?? null,
       },
     });
 

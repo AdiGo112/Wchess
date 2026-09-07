@@ -76,8 +76,8 @@ model Game {
   fen             String?     // final position FEN
   moves           String[]    // SAN array ["e4","e5",...]
   duration        Int?        // actual game seconds
-  openingEco      String?
-  openingName     String?
+  openingEco      String?     // "C20", filled at save from the SAN list
+  openingName     String?     // "King's Pawn Game"; null on games saved before 2026-09-08
   tournamentId    String?
   createdAt       DateTime    @default(now())
 }
@@ -89,6 +89,38 @@ enum GameReason {
 }
 ```
 
+### GameAnalysis
+Post-game Stockfish analysis, one row per game (Stockfish Increment 2).
+
+```prisma
+model GameAnalysis {
+  gameId        String   @id       // also the FK to Game, ON DELETE CASCADE
+  depth         Int                // 18
+  moves         Json               // AnalysedMove[], one entry per ply
+  accuracyWhite Float              // 0-100
+  accuracyBlack Float
+  engine        String   @default("stockfish-18-lite")
+  createdAt     DateTime @default(now())
+}
+```
+
+Each entry in `moves`:
+
+```ts
+{
+  ply: 7, san: "Nf6", color: "w" | "b",
+  evalCp: -250,        // AFTER the move, White's point of view. +/-10000 = mate on the board
+  mate: null,          // moves to mate, White's point of view, when the engine sees one
+  bestMove: "d7d5",    // engine's choice in the position BEFORE the move (UCI)
+  playedMove: "g8f6",
+  cpLoss: 280,         // centipawns given away, clamped at +/-1000 either side
+  accuracy: 12.4,
+  classification: "BEST" | "EXCELLENT" | "GOOD" | "INACCURACY" | "MISTAKE" | "BLUNDER",
+}
+```
+
+Written once and kept: the same moves at the same depth always score the same,
+so a second viewer costs no engine time. Deleting the game deletes the row.
 ### Tournament
 ```prisma
 model Tournament {
@@ -174,83 +206,20 @@ model RefreshToken {
 
 ---
 
-## MongoDB (Mongoose)
+## MongoDB — removed
 
-### Message (chat-service)
-```typescript
-{
-  roomId:   String,   // "game:{roomId}" | "lobby" | "dm:{userId}"
-  roomType: String,   // "game" | "lobby" | "dm"
-  senderId: String,
-  username: String,
-  text:     String,   // max 500 chars
-  createdAt: Date,    // TTL index: 30 days for game chat
-}
-// index: { roomId: 1, createdAt: -1 }
-```
+Mongo left the stack on 2026-07-19. Its only consumers were chat and
+notifications, both cut by ADR-0032, so the `Message`, `Notification`,
+`Analysis`, `Study` and `ActivityFeed` collections this file used to document
+no longer exist anywhere - neither in code nor in a running database.
 
-### Notification
-```typescript
-{
-  userId:   String,
-  type:     String,   // "game_result" | "friend_request" | "tournament_start" | ...
-  data:     Mixed,    // type-specific payload
-  read:     Boolean,  // default false
-  createdAt: Date,
-}
-// index: { userId: 1, read: 1, createdAt: -1 }
-```
+**Analysis is Postgres now**, not a Mongo collection: see `GameAnalysis` above.
+The old sketch stored one entry per *position*; the shipped table stores one per
+*ply*, which is what a move list and an eval graph both want.
 
-### Analysis
-```typescript
-{
-  gameId:   String,
-  status:   String,   // "pending" | "complete"
-  positions: [{
-    fen:       String,
-    eval:      Number,  // centipawns
-    bestMove:  String,
-    depth:     Number,
-    class:     String,  // "brilliant"|"good"|"inaccuracy"|"mistake"|"blunder"
-  }],
-  accuracy: { white: Number, black: Number },
-  createdAt: Date,
-}
-```
-
-### Study
-```typescript
-{
-  ownerId:       String,
-  title:         String,
-  isPublic:      Boolean,
-  collaborators: [String],
-  chapters: [{
-    name:        String,
-    fen:         String,
-    pgn:         String,
-    orientation: String,
-    mode:        String,
-  }],
-  createdAt: Date,
-  updatedAt: Date,
-}
-```
-
-### ActivityFeed
-```typescript
-{
-  userId:    String,
-  actorId:   String,
-  type:      String,  // "game_played"|"puzzle_solved"|"tournament_joined"
-  data:      Mixed,
-  createdAt: Date,
-}
-// TTL index: 90 days
-```
+See `docs/FUTURE_SCOPE.md` for what the cut features would need if they return.
 
 ---
-
 ## Redis Keys
 
 ### Active Game Rooms
@@ -259,17 +228,25 @@ KEY   game:room:{roomId}        TYPE: string (JSON)   TTL: 86400
 VALUE: {
   id, whitePlayer, blackPlayer,
   fen, moves, timers: {white: ms, black: ms},
-  lastMoveAt, status, timeControl, increment,
-  startedAt, drawOfferedBy, spectators
+  lastMoveAt, status, timeControl, increment, variant,
+  startedAt, drawOfferedBy, rematchRequestedBy,
+  difficulty,   // 1-5 on computer games only
+  version       // optimistic-concurrency counter, bumped by every casSaveRoom
 }
+
+KEY   clock:deadlines           TYPE: ZSET  score=epoch-ms member=roomId
 ```
+
+No `spectators` field: the spectate handler was cut by ADR-0032. `version` is
+read-modify-written through a Lua compare-and-set, so two concurrent moves
+cannot both win. `clock:deadlines` is the single sorted-set sweeper that ADR-0004
+runs instead of one `setInterval` per game - one timer for every live game, and
+deadlines that survive a restart.
 
 ### Matchmaking Queues
 ```
-KEY   queue:bullet              TYPE: List (LPUSH/RPOP)
-KEY   queue:blitz               TYPE: List
-KEY   queue:rapid               TYPE: List
-KEY   queue:classical           TYPE: List
+KEY   queue:{variant}:{timeControl}   TYPE: List (LPUSH/RPOP)
+                                      e.g. queue:blitz:300, queue:rapid:600
 
 Element: { userId, username, rating, socketId, joinedAt }
 ```
@@ -291,21 +268,21 @@ Lichess-weekly semantic. Simpler, cron-free, and correct for "who's hot this wee
 The 60s `cache:` entry avoids re-hitting Postgres for usernames on every board load;
 empty boards are never cached (so a first game shows up immediately).
 
-### Presence & Caching
+### Socket Identity
 ```
-KEY   online:{userId}           TYPE: string "1"    TTL: 30s (heartbeat refresh)
-KEY   session:{userId}          TYPE: string (JSON) TTL: 300s
-KEY   socket:{socketId}         TYPE: string → userId
-KEY   user:socket:{userId}      TYPE: string → socketId
-KEY   spectators:{roomId}       TYPE: Set of socketIds
-KEY   ratelimit:{ip}:{endpoint} TYPE: ZSET (sliding window)
+KEY   socket:{socketId}         TYPE: string -> userId
+KEY   user:socket:{userId}      TYPE: string -> socketId
 ```
 
-### BullMQ Queues (Redis-backed)
-```
-bull:stockfish      — { fen, movetime, depth, roomId, userId }
-bull:notifications  — { userId, type, data }
-bull:analysis       — { gameId, userId }
-bull:email          — { to, template, data }
-bull:rating-update  — { gameId, whiteId, blackId, result }
-```
+That is the whole set. `online:{userId}`, `session:{userId}`, `spectators:{roomId}`
+and `ratelimit:{ip}:{endpoint}` were documented but never written by any code;
+the `online:` key was deleted outright in the pre-Increment-2 hardening pass.
+Rate limiting is `@nestjs/throttler` in process memory, not Redis.
+
+### BullMQ — removed
+
+Bull and its five queues went with the v1 scope cut (ADR-0032). Nothing in
+`backend/src` enqueues a job. Analysis, the one job-shaped workload that
+survived, runs as a promise chain over a single out-of-process engine instead
+- see `AnalysisService`. That is a deliberate single-instance choice, and it is
+listed in ADR-0032 under "Before adding a second instance".

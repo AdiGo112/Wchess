@@ -6,6 +6,26 @@
 ---
 
 ## Active Branch
+`feature/board-layout` — cut from `dev` on 2026-09-08 to rebuild the board
+pages around a full-height board. See **Currently In Progress** below.
+
+## Previous Branch
+`dev`. Three feature branches merged in on 2026-09-08:
+
+| Merge | Branch | What |
+|---|---|---|
+| `8e70b4e` | `feature/stockfish-inc2` | Stockfish Inc 2 — server-side post-game analysis |
+| `0cc913c` | `feature/analysis-ui` | Analysis Inc 4 + 5 — the game review page |
+| `480be75` | `feature/eco-openings` | Analysis Inc 3 — ECO opening naming |
+
+**Nothing is pushed.** `origin/dev` is still at the pre-Increment-2 hardening merge,
+and `staging` and `main` are further behind. Next feature branch should be cut from
+`dev`.
+
+`dev` — `feature/stockfish-inc2` merged in as `8e70b4e` (2026-09-07): Stockfish
+Increment 2, server-side post-game analysis. Not pushed yet.
+
+## Previous Branch
 `dev` — `feature/v1-scope-cut` merged in as `31b6e87` (2026-07-19) and pushed. The merge
 carried `d3bfa1a` (stockfish WASM) too, since the feature branch was cut from it.
 Verified pre-push: backend `tsc` clean, frontend build clean, and the full stack was
@@ -16,7 +36,7 @@ Also on dev now: `62593c5` monochrome neo-brutalist UI redesign, `2cb3a8d` brand
 ChessWeb → WChess (user-facing strings only; note the GitHub remote was already named
 `Wchess`).
 
-## Done on this branch
+## Done on `dev`
 - `62593c5` — **Full UI redesign: monochrome neo-brutalism.** Black/white/greys only,
   3px borders, hard offset shadows, Archivo Black + Space Grotesk + Space Mono
   (Google Fonts in `index.html`). Design tokens in `tailwind.config.js`, reusable
@@ -140,6 +160,192 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`feature/board-layout` — **the board pages fill the screen and stop scrolling.**
+
+Asked for directly: the board was too small, the page scrolled, and the panels
+sat under and beside it. Now the board is as large as the frame allows, pinned
+left, with everything else in one column to its right — on the play page and the
+review page alike. On a 1080p screen the board went from a hard 500px cap to
+~900px.
+
+- `hooks/useBoardFit.ts` — one shared hook. A `ResizeObserver` on the row holding
+  the board and its panel; the board is the smaller of the row height and the
+  width left over after the panel, so it follows window resizes with no magic
+  offsets for the navbar or page padding. It reserves 14px for the 8px hard
+  offset shadow, which the frame edge was otherwise clipping — the one place
+  this design system shows depth.
+- **It uses a callback ref, not `useRef`.** The review page returns a loading
+  state first, so at effect time a plain ref was still null: the observer never
+  attached and the board sat at its 260px floor while the play page looked fine.
+  Fixed in the hook, so any future page with an early return is safe too.
+- `App.tsx` — the window itself no longer scrolls; `<main>` is the scroll
+  container. A page that fits the viewport scrolls nowhere at all, and every
+  other page scrolls inside the frame instead of moving it.
+- Long move lists scroll inside their own card, so the page never grows.
+- Below 1024px the board and panel stack and normal scrolling returns — a fixed
+  full-height layout on a phone is worse than a scrolling one.
+
+**Status: DONE, 22/22 in a real browser.** Three checks added to
+`verify-review-ui.mjs` guard the intent directly: the board is more than 60% of
+the viewport height, its left edge is in the left quarter, and neither the page
+nor `<main>` scrolls. Measured at 1920x1080 and 1366x768: board 904/592px on
+play, 883/571px on review, nothing scrolling at either size. 16/16 page walk
+still green.
+
+## Previously In Progress
+`feature/eco-openings` — **Analysis increment 3: ECO opening naming.** The last
+open piece of the analysis feature.
+
+`Game.openingEco` and `Game.openingName` have been columns with nothing writing
+them since the initial schema — the third instance of that shape in this repo,
+after `Game.pgn` and the `@@index` duplicates the hardening pass removed.
+
+- `backend/src/games/openings.ts` — longest-prefix match of the SAN move list
+  against a static table, filled in `saveCompletedGame` (the only place a finished
+  game is written, so the only place it can be filled) and emitted as standard
+  `[ECO]` / `[Opening]` PGN tags, so an exported game names itself in any viewer.
+- **Main lines only, on purpose.** The full ECO list is ~3000 transpositions this
+  codebase has no other use for, and every extra entry only refines a label. Because
+  the match falls back to the nearest shorter prefix, an unlisted line still reads
+  "Sicilian Defence" rather than nothing: a shallow table degrades to vaguer, never
+  to wrong. Dropping in a full table later is a data change; the matcher does not
+  move.
+- Shown on the review page header and on every game-history row.
+
+**Not backfilled.** Games saved before 2026-09-08 keep a null opening. Filling them
+would mean a write on a read path or a migration script, for a cosmetic label on
+games nobody is looking at.
+
+**Status: DONE.** 6 unit tests in `openings.spec.ts` (longest match wins, stays
+named once the game leaves the book, no match for an irregular opening) and 3 live
+checks folded into `verify-hardening.mjs` (E1: both columns written, `[ECO "C20"]`
+and `[Opening]` in the PGN of a real socket game). Both builds clean, 20/20 unit.
+
+## Previously In Progress
+`feature/analysis-ui` — **Analysis increments 4 + 5: the game review page.**
+
+Cut from `dev` on 2026-09-08. Increment 2 left working endpoints that nothing
+called; this is the half a player can see.
+
+**What shipped**
+- `frontend/src/pages/GameReview.tsx` at `/review/:gameId` — eval bar, a board
+  replayed from the stored SAN list, arrow keys / buttons / a clickable move list,
+  `?!` `?` `??` annotation in standard chess notation (a good move gets no mark),
+  a verdict card for the move on the board, and per-player accuracy with a
+  classification tally.
+- **Opening the review queues the sweep** — increment 5's "auto-trigger". The user
+  navigated here on purpose; a button to press first would be ceremony. The page
+  polls every 2s and fills in when the analysis lands.
+- Links in from every game-history row and from the game-over modal. That needed a
+  backend line: `game_over` now carries the persisted `gameId` (null for
+  vs-computer games, which are never saved), so the modal has something to link to.
+- Accuracy is a **panel, not a modal**. A modal you have to dismiss to reach the
+  board it is describing is the wrong shape.
+
+**Two library defects found by looking at the rendered page, not the types.**
+- The board overlapped the accuracy panel. `react-chessboard` v1.3 measures its
+  parent once and has no resize observer, so a percentage width leaves it at its
+  560px default; `boardWidth` is now driven explicitly. The live game board has the
+  same latent issue and gets away with it because its move panel is narrow enough.
+- The engine's suggested move was drawn with `customArrows` — and rendered in
+  react-chessboard's default orange, in a design system that has no orange, because
+  the per-arrow colour element is ignored. Worse, the library clears arrow state
+  from a timeout tied to the piece animation, so on a board driven entirely by
+  external position changes the arrow vanished a few hundred ms after every step.
+  Replaced with inset square rings via `customSquareStyles`: a plain prop that
+  survives, and it matches how the live board already marks squares. Animation is
+  off (`animationDuration={0}`) — sliding a piece to depict a jump from ply 30 back
+  to ply 4 depicts something that never happened.
+
+**Status: DONE, 19/19 in a real browser** (`backend/scripts/verify-review-ui.mjs`).
+Both builds clean.
+
+**Playwright now runs here, and item 3 is closed.** It is deliberately *not* a
+dependency — both browser scripts document the unsaved install
+(`npm install --no-save playwright && npx playwright install chromium`). With it:
+- `verify-review-ui.mjs` — 19/19. Logs in through the real form, follows a history
+  row into the review, waits out a live sweep, and asserts the board agrees with the
+  ply counter square by square (the queen leaves h5 for f7 and comes back), the
+  blunder is marked `Nf6??`, the mating move is not marked, the hint rings land on
+  g7-g6, and nothing renders in the library's default orange.
+- `verify-pages.mjs` — 16/16. Every route, logged out and logged in, asserting each
+  one drew its own content rather than a blank page under the navbar — measured on
+  `<main>`, since a blank page still has a navbar. That is the exact failure the
+  hardening pass found twice (`/players`, `/profile/edit`). Zero console errors on
+  any route.
+
+Two of the failures in those runs were the *scripts* being wrong, not the app: f7
+holds Black's pawn until the queen takes it, and the leaderboard's heading is "THE
+FOOD CHAIN", not the word "leaderboard".
+
+## Previously In Progress
+`feature/stockfish-inc2` — **Stockfish Increment 2: server-side post-game analysis.**
+
+Cut from `dev` on 2026-09-07. The backend `stockfish/` module was deleted in the v1
+scope cut, so this started from nothing rather than from the old placeholder.
+
+**How the server gets an engine — the open question Inc 2 had to answer.** It runs
+the *same* `stockfish-18-lite-single` WASM build the browser already uses, as a
+**child process** speaking plain UCI over stdio. Two things were tried first:
+
+- In-process was never an option. A depth-18 sweep of an 80-ply game is ~47s of
+  solid CPU, and on a single-instance monolith (ADR-0032) that stalls every socket
+  and every request for the duration.
+- A `worker_threads` worker was written, and **failed at runtime**: the engine’s
+  emscripten build claims `worker_threads` for its own pthread plumbing, so inside
+  a Worker it never assigns `module.exports` and `initEngine` throws "Could not load
+  the engine correctly." `typeof require(engine)` is `function` on the main thread
+  and `object` in a Worker. A child process is both immune to that and a cleaner
+  CPU boundary, and it deleted a file and a custom message protocol.
+
+No BullMQ. Bull went with ADR-0032, and the queue here is a promise chain over one
+engine: one sweep at a time, at most 3 games waiting, 503 past that. Redis is not
+involved — restarting the server just means the next POST restarts the sweep, which
+is strictly better than a `RUNNING` row stuck in Postgres.
+
+**What shipped**
+- `backend/src/analysis/` — `classify.ts` (pure scoring), `analysis.service.ts`
+  (engine + queue + sweep), controller, module. `POST /analysis/:gameId` (authed —
+  the only route that costs real CPU) queues and returns immediately;
+  `GET /analysis/:gameId` (public, like `GET /games/:id`) returns
+  `done` / `running` / `none`.
+- **N+1 evaluations for N moves**, not 2N: the position after move i is the position
+  before move i+1, so every eval is read by two moves. That halves the sweep.
+- `GameAnalysis` table (one row per game, `ON DELETE CASCADE`), migration
+  `20260907180922_add_game_analysis` — one `CREATE TABLE` plus its FK, nothing else.
+  Analysis is computed once and kept: same moves, same depth, same numbers, so a
+  second viewer costs no engine time.
+- Classification on clamped centipawn loss (BEST / EXCELLENT <20 / GOOD <50 /
+  INACCURACY <100 / MISTAKE <250 / BLUNDER) and Lichess-formula accuracy. Evals are
+  clamped to ±1000 first, so going from +25 pawns to +12 is not a blunder.
+
+**Status: DONE, 14/14 live** (`backend/scripts/verify-analysis.mjs`) and 14/14 unit
+(`classify.spec.ts` — the first `.spec.ts` in a repo that had Jest configured and
+zero tests). `tsc --noEmit` + `nest build` clean.
+
+- Morphy’s Opera Game: 33 plies in 21s, White 98.2% vs Black 89.1%, worst loss
+  W 34cp / B 203cp, `Rd8#` scored BEST.
+- An 80-ply game in 47.5s — inside the increment’s 120s budget — while unrelated
+  API requests stayed at **10ms**, which is the whole reason the engine is out of
+  process.
+- A second POST on an analysed game returns the stored row in 4ms.
+
+**One bug that only the live run could show.** `mate: 0` — "the side to move is
+checkmated" — is a fixed point under negation, so flipping it to the mating
+player’s point of view left it reading as a total loss. The checkmating move came
+back as the game’s worst blunder and cost White ~6 accuracy points (92.4 → 98.2
+after the fix). Pure unit tests never saw it because it only appears where the
+terminal position meets the point-of-view flip. `invert()` now writes that case out
+explicitly, and both suites guard it.
+
+**Also corrected while here:** `docs/architecture/database-schema.md` still
+documented a whole MongoDB section — including an `Analysis` *collection* — plus
+five BullMQ queues, `spectators`, and four Redis keys no code ever wrote. Mongo and
+Bull have been gone since 2026-07-19. Same class of doc-vs-code contradiction as
+ADR-0004 and ADR-0009; corrected rather than left next to a real `GameAnalysis`
+table.
+
+## Previously In Progress
 `feature/pre-inc2-hardening` — close every known defect before Stockfish Inc 2.
 
 Cut from `dev` on 2026-08-16. Both compilers were already clean, so everything
@@ -318,18 +524,19 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Merge `feature/pre-inc2-hardening` → `dev`.** Migration applied and
-   verification is 19/19; only the browser click-through (item 3) is outstanding.
-2. **Stockfish Inc 2** — the analysis worker: depth-18 analysis, move classification, storage,
-   `POST /analysis/request` + `GET /analysis/:gameId`. Note the backend `stockfish/` module was
-   **deleted** in the v1 scope cut, so this starts from nothing rather than from the old placeholder.
-   Inc 2 has to decide how the server gets an engine (spawn a native binary, or run the same WASM under
-   Node — the WASM build already works headless, which is how the computer-move path was verified).
-   Storage is Postgres now, not MongoDB — Mongo is gone.
-3. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
-   only by the production build + the verified socket contracts. The hardening pass added several
-   UI changes (optimistic moves, rematch, Profile, `/players`, 404) that have never rendered in a
-   real browser.
+1. **Push, then `dev` → `staging` → `main`.** Nothing has been pushed since the
+   pre-Increment-2 hardening merge; three feature merges are sitting on `dev`
+   locally.
+2. **Decide whether Playwright becomes a real devDependency.** It is installed
+   unsaved right now, which means the two browser scripts only run for whoever
+   installs it by hand. The optimistic-move and rematch paths still have no browser
+   coverage — they need two sockets in two contexts, which is a bigger script than
+   the walk-through.
+3. **Nothing else is queued.** All twelve v1 increments that ADR-0032 kept are
+   done. What remains is the deferred set (chat, notifications, puzzles,
+   tournaments, social, spectate) and Frontend UI increments 1-6 — Zustand, React
+   Query, sound, board themes, dark mode, mobile/a11y. See `docs/FUTURE_SCOPE.md`
+   and pick, rather than assuming an order.
 
 ## Branch Order (full sequence)
 ```

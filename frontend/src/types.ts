@@ -91,6 +91,8 @@ export interface RatingChangeSide {
 
 export interface GameOverPayload {
   roomId: string;
+  /** Persisted Game id for the review link; null on vs-computer games, which are never saved. */
+  gameId: string | null;
   result: 'white' | 'black' | 'draw' | 'aborted';
   reason: string;
   ratingChange: { white: RatingChangeSide; black: RatingChangeSide } | null;
@@ -137,6 +139,9 @@ export interface GameRecord {
   variant: string;
   moves: string[];
   createdAt: string;
+  /** ECO code and opening name, filled at game save. Null on games recorded before Analysis Inc 3. */
+  openingEco?: string | null;
+  openingName?: string | null;
 }
 
 /** One row of GET /users — the public player directory. */
@@ -199,4 +204,41 @@ export interface ChallengeAcceptResponse {
   gameId: string;
   color: Color;
   timeControl: number;
+}
+
+// ── Analysis (Stockfish Increment 2) ────────────────────────────────────────
+
+export type MoveClassification =
+  | 'BEST'
+  | 'EXCELLENT'
+  | 'GOOD'
+  | 'INACCURACY'
+  | 'MISTAKE'
+  | 'BLUNDER';
+
+export interface AnalysedMove {
+  ply: number;
+  san: string;
+  color: 'w' | 'b';
+  /** Evaluation AFTER this move, White's point of view. ±10000 = mate on the board. */
+  evalCp: number | null;
+  mate: number | null;
+  /** Engine's pick in the position BEFORE the move, UCI. */
+  bestMove: string | null;
+  playedMove: string;
+  cpLoss: number;
+  accuracy: number;
+  classification: MoveClassification;
+}
+
+/** GET /analysis/:gameId — the row plus the status the sweep is in. */
+export interface AnalysisResponse {
+  status: 'done' | 'running' | 'none';
+  gameId: string;
+  depth?: number;
+  engine?: string;
+  moves?: AnalysedMove[];
+  accuracyWhite?: number;
+  accuracyBlack?: number;
+  createdAt?: string;
 }

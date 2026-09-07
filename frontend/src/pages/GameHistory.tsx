@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../api";
 import { describeResult, ratingDelta } from "../utils/gameResult";
@@ -47,8 +48,10 @@ export default function GameHistory() {
             const ratingChange = ratingDelta(game, user?.id);
             const res = describeResult(game, user?.id);
             return (
-              <div
+              <Link
                 key={game.id}
+                to={`/review/${game.id}`}
+                title="Open the post-mortem"
                 className="card-b-flat flex justify-between items-center gap-4 hover:shadow-brutal transition-shadow"
               >
                 <div className="flex items-center gap-4 min-w-0">
@@ -65,9 +68,10 @@ export default function GameHistory() {
                     <p className="font-bold uppercase tracking-wider truncate">
                       vs {getOpponent(game)}
                     </p>
-                    <p className="text-xs font-mono text-neutral-500">
+                    <p className="text-xs font-mono text-neutral-500 truncate">
                       {new Date(game.createdAt).toLocaleDateString()} ·{" "}
                       {game.moves?.length ?? 0} moves · {game.variant?.toLowerCase()}
+                      {game.openingName && ` · ${game.openingName}`}
                     </p>
                   </div>
                 </div>
@@ -75,7 +79,7 @@ export default function GameHistory() {
                   {ratingChange > 0 ? "+" : ""}
                   {ratingChange}
                 </span>
-              </div>
+              </Link>
             );
           })}
         </div>

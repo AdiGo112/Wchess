@@ -14,9 +14,9 @@
 
 | Layer | Done | Partial | Not Started | Total |
 |---|---|---|---|---|
-| Backend modules (v1) | 3 | 3 | 0 | 6 |
+| Backend modules (v1) | 4 | 3 | 0 | 7 |
 | Frontend areas (v1) | 2 | 4 | 1 | 7 |
-| **Increments completed (v1)** | **9** | **0** | **~8** | **~17** |
+| **Increments completed (v1)** | **10** | **0** | **~7** | **~17** |
 
 ### Deferred to post-v1
 
@@ -69,7 +69,7 @@
 | # | Increment | Status | Branch | Notes |
 |---|---|---|---|---|
 | 1 | ~~Backend worker: computer-move job, Redis pub/sub bridge~~ | 🚫 **Superseded** | `feature/stockfish` | **Contradicted ADR-0009** (which says computer moves run as browser WASM, no server CPU). The job existed, computed a heuristic move, and only logged it — vs-computer games hung after White's first move. Whole server-side computer-move path **deleted**; processor is analysis-only. |
-| 2 | Backend analysis worker: depth-18, MongoDB store | ❌ | `feature/stockfish` | `@Process('analysis')` is still a **placeholder returning a random legal move + `evaluation: 0`**. No real engine on the server yet. |
+| 2 | Backend analysis worker: depth-18, move classification, storage | ✅ | `feature/stockfish-inc2` | Built from nothing — the placeholder processor and the whole `stockfish/` module were deleted in the v1 scope cut. `backend/src/analysis/`: Stockfish 18 lite WASM as a **child process** speaking UCI over stdio, one sweep at a time, `POST/GET /analysis/:gameId`, stored in Postgres `GameAnalysis` (Mongo is gone). N+1 evaluations for N moves. 14/14 live; an 80-ply game in 47s with the API staying at 10ms. |
 | 3 | Frontend WASM worker: 5 difficulty levels | ✅ | `feature/stockfish` | `hooks/useStockfish.js` — `stockfish-18-lite-single` (7.3MB, no SharedArrayBuffer → no COOP/COEP). Difficulty 1–5 → UCI Skill Level 0–20 + 200–1500ms. Engine copied from node_modules by `scripts/copy-engine.mjs` on predev/prebuild. All 5 levels verified against the real binary. |
 | 4 | Frontend integration: computer game flow, difficulty picker | ✅ | `feature/stockfish` | `ChessGame.jsx` thinks on black's turn + "Stockfish is thinking…"; new **`computer_move`** socket event (needed — `handleMove` rejects a move from a socket that doesn't own the turn, and black is `{id:'computer'}`). Server re-validates: vs-computer room, sender is its white player, black to move, chess.js legality. 13/13 e2e checks pass on the live stack. |
 
@@ -147,11 +147,11 @@
 
 | # | Increment | Status | Branch | Notes |
 |---|---|---|---|---|
-| 1 | Backend BullMQ job: request-analysis endpoint, enqueue | ❌ | `feature/analysis` | Not started |
-| 2 | Backend move classifier: centipawn loss thresholds | ❌ | `feature/analysis` | Not started |
-| 3 | Backend ECO lookup: static JSON, opening identification | ❌ | `feature/analysis` | Not started |
-| 4 | Frontend analysis board: step through moves, eval bar | ❌ | `feature/analysis` | Not started |
-| 5 | Frontend post-game: auto-trigger, accuracy modal, link | ❌ | `feature/analysis` | Not started |
+| 1 | ~~Backend BullMQ job: request-analysis endpoint, enqueue~~ | ✅ **Delivered elsewhere** | `feature/stockfish-inc2` | `POST /analysis/:gameId` exists. No BullMQ: Bull went with ADR-0032, and one out-of-process engine plus a promise chain is the whole queue on a single instance. |
+| 2 | ~~Backend move classifier: centipawn loss thresholds~~ | ✅ **Delivered elsewhere** | `feature/stockfish-inc2` | `backend/src/analysis/classify.ts` — BEST/EXCELLENT/GOOD/INACCURACY/MISTAKE/BLUNDER on clamped centipawn loss, plus Lichess-formula accuracy. 14 unit tests. |
+| 3 | Backend ECO lookup: static table, opening identification | ✅ | `feature/eco-openings` | `games/openings.ts` — longest-prefix match on the SAN list, written into `Game.openingEco` / `openingName` at save (the third dead column, after `pgn` and the redundant indexes) plus standard `[ECO]` / `[Opening]` PGN tags. Main lines only: an unlisted line degrades to the nearest shorter prefix, so it is vaguer, never wrong. |
+| 4 | Frontend analysis board: step through moves, eval bar | ✅ | `feature/analysis-ui` | `pages/GameReview.tsx` at `/review/:gameId`. Board replayed from the stored SAN, arrow keys + buttons + clickable move list, eval bar off `evalCp`, `?!`/`?`/`??` annotation in the move list, per-player accuracy with a classification tally, engine suggestion ringed on the board. |
+| 5 | Frontend post-game: auto-trigger, accuracy modal, link | ✅ | `feature/analysis-ui` | Opening a review queues its own sweep and polls. Review links from every game-history row and from the game-over modal (`game_over` now carries the persisted `gameId`). Accuracy is a panel on the page rather than a modal — a modal you dismiss to reach the board it describes is the wrong shape. |
 
 ---
 
@@ -176,19 +176,29 @@
 | Auth | 4 | 4 | 100% |
 | Game Engine | 3 | 3 | 100% |
 | Matchmaking | 3 | 3 | 100% |
-| Stockfish | 2 | 3 | 67% |
+| Stockfish | 3 | 3 | 100% |
 | Leaderboard | 3 | 3 | 100% |
 | Chat | 0 | 3 | 0% |
 | Tournaments | 0 | 6 | 0% |
 | Puzzles | 0 | 5 | 0% |
 | Social | 0 | 5 | 0% |
 | Notifications | 0 | 4 | 0% |
-| Analysis | 0 | 5 | 0% |
+| Analysis | 5 | 5 | 100% |
 | Frontend UI | 0 | 6 | 0% |
-| **Total** | **11** | **51** | **22%** |
+| **Total** | **21** | **51** | **41%** |
 
 Leaderboard Inc 2 + 3 shipped in `8e1a6d6` but this table still read 1/3 until
 2026-08-16.
+
+Stockfish Inc 2 also closes Analysis increments 1 and 2 — the analysis endpoint
+and the move classifier are the same code, and splitting them across two feature
+branches would have meant building the engine plumbing twice. Analysis 3-5 (ECO
+lookup, analysis board, post-game modal) are still open.
+
+The **Total** row did not add up before this pass either: the rows above it summed
+to 15 while the total read 11. It is a plain sum of the column now.
+
+Analysis is complete as of 2026-09-08.
 
 ---
 
