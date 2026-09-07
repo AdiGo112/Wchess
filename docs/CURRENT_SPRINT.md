@@ -6,8 +6,9 @@
 ---
 
 ## Active Branch
-`feature/stockfish-inc2` — cut from `dev` on 2026-09-07 for Stockfish Increment 2
-(server-side post-game analysis). See **Currently In Progress** below.
+`dev` — `feature/stockfish-inc2` merged in as `9e6b300` (2026-09-07): Stockfish
+Increment 2, server-side post-game analysis. See **Currently In Progress** below.
+Not pushed yet. Next feature branch should be cut from `dev`.
 
 ## Previous Branch
 `dev` — `feature/v1-scope-cut` merged in as `31b6e87` (2026-07-19) and pushed. The merge
@@ -389,14 +390,12 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Merge `feature/stockfish-inc2` → `dev`.** Migration applied, 14/14 live,
-   14/14 unit, both builds clean.
-2. **Analysis Inc 4 + 5 — the frontend.** The endpoints exist and nothing calls
+1. **Analysis Inc 4 + 5 — the frontend.** The endpoints exist and nothing calls
    them: a game review board (step through moves, eval bar off `evalCp`,
    classification badges) and a post-game accuracy panel linking into it. Inc 1
-   and 2 of that feature are already delivered by this branch; Inc 3 (ECO opening
-   lookup) is independent and small.
-3. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
+   and 2 of that feature are already delivered; Inc 3 (ECO opening lookup) is
+   independent and small.
+2. **Browser click-through** — Playwright isn't installed here; the DOM path is covered
    only by the production build + the verified socket contracts. The hardening pass added several
    UI changes (optimistic moves, rematch, Profile, `/players`, 404) that have never rendered in a
    real browser, and the analysis UI above will add more.
