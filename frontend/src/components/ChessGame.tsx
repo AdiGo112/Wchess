@@ -361,7 +361,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     <div
       ref={fit.ref}
       className={`h-full w-full gap-6 ${
-        fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch"
+        fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch justify-center"
       }`}
     >
       {/* Board — left, as large as the frame allows */}
@@ -384,7 +384,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
           at the bottom, so the panel keeps the board's own orientation. */}
       <div
         className={`flex flex-col gap-3 min-h-0 ${
-          fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0"
+          fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0 max-w-[360px]"
         }`}
       >
         <PlayerBar
