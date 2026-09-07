@@ -218,7 +218,7 @@ export default function GameReview() {
       <div
         ref={fit.ref}
         className={`flex-1 min-h-0 gap-4 ${
-          fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch"
+          fit.stacked ? "flex flex-col items-center overflow-y-auto" : "flex items-stretch justify-center"
         }`}
       >
         {/* Board — left, as large as the frame allows */}
@@ -258,7 +258,7 @@ export default function GameReview() {
         {/* Everything else, right of the board */}
         <div
           className={`flex flex-col gap-3 min-h-0 ${
-            fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0"
+            fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0 max-w-[380px]"
           }`}
         >
           {running ? (
