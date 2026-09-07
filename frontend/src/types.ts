@@ -139,6 +139,9 @@ export interface GameRecord {
   variant: string;
   moves: string[];
   createdAt: string;
+  /** ECO code and opening name, filled at game save. Null on games recorded before Analysis Inc 3. */
+  openingEco?: string | null;
+  openingName?: string | null;
 }
 
 /** One row of GET /users — the public player directory. */

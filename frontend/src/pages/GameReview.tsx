@@ -211,6 +211,11 @@ export default function GameReview() {
         <span className="tag-b">
           {game.whiteUsername} vs {game.blackUsername} · {game.moves.length} moves
         </span>
+        {game.openingName && (
+          <span className="tag-b-inverse ml-2">
+            {game.openingEco} {game.openingName}
+          </span>
+        )}
       </p>
 
       <div className="flex flex-col lg:flex-row gap-6 justify-center items-start">

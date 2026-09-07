@@ -68,9 +68,10 @@ export default function GameHistory() {
                     <p className="font-bold uppercase tracking-wider truncate">
                       vs {getOpponent(game)}
                     </p>
-                    <p className="text-xs font-mono text-neutral-500">
+                    <p className="text-xs font-mono text-neutral-500 truncate">
                       {new Date(game.createdAt).toLocaleDateString()} ·{" "}
                       {game.moves?.length ?? 0} moves · {game.variant?.toLowerCase()}
+                      {game.openingName && ` · ${game.openingName}`}
                     </p>
                   </div>
                 </div>

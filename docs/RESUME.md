@@ -103,7 +103,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 
 | Severity | Location | Description |
 |---|---|---|
-| Low | — | No ECO opening naming (Analysis increment 3). Games show a move list, never "Sicilian, Najdorf". |
+| Low | `backend/src/games/openings.ts` | The ECO table covers main lines only, so an off-book game gets a vaguer name ("Sicilian Defence" rather than a specific variation). Games recorded before 2026-09-08 have no opening at all — the columns are filled at save and nothing backfills. |
 | Low | `frontend/src/components/ChessGame.tsx` | Promotion is auto-queen — there is no promotion picker. |
 
 _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emitted — the whole server-side computer-move path is gone; the engine now runs in the browser per ADR-0009._
@@ -121,6 +121,7 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Game Gateway | `backend/src/games/game.gateway.ts` |
 | Glicko-2 util | `backend/src/common/utils/elo.ts` |
 | Analysis engine + queue | `backend/src/analysis/analysis.service.ts` |
+| ECO opening table + matcher | `backend/src/games/openings.ts` (unit tests beside it) |
 | Move classification + accuracy maths | `backend/src/analysis/classify.ts` (unit tests beside it) |
 | Axios client + refresh interceptors | `frontend/src/api.ts` |
 | Socket context | `frontend/src/context/SocketContext.tsx` |
@@ -180,7 +181,7 @@ an empty value means "same origin".
 
 ---
 
-_Last updated: 2026-09-08 (Analysis increments 4 + 5: the review page, plus the
+_Last updated: 2026-09-08 (Analysis increments 3, 4 and 5: ECO naming, the review page, plus the
 first real browser walk-through of every route).
 Previous: 2026-09-07 Stockfish Increment 2, server-side post-game analysis.
 Previous: 2026-08-16 pre-Increment-2 hardening (security, game-path, UI and docs;

@@ -126,7 +126,7 @@ WChess/
 - Friend challenges via tokened links, and vs-computer games
 - Computer opponent — Stockfish WASM in the player's own browser, 5 difficulties (ADR-0009)
 - Leaderboards (all-time / weekly / monthly) via Redis sorted sets, 60s read cache
-- Game history with PGN export
+- Game history with PGN export, including ECO code and opening name
 - Post-game analysis — depth-18 sweep, per-move classification, per-player accuracy,
   and a review board at `/review/:gameId` with an eval bar and an annotated move list
 - Monochrome neo-brutalist UI
