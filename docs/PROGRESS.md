@@ -150,8 +150,8 @@
 | 1 | ~~Backend BullMQ job: request-analysis endpoint, enqueue~~ | ✅ **Delivered elsewhere** | `feature/stockfish-inc2` | `POST /analysis/:gameId` exists. No BullMQ: Bull went with ADR-0032, and one out-of-process engine plus a promise chain is the whole queue on a single instance. |
 | 2 | ~~Backend move classifier: centipawn loss thresholds~~ | ✅ **Delivered elsewhere** | `feature/stockfish-inc2` | `backend/src/analysis/classify.ts` — BEST/EXCELLENT/GOOD/INACCURACY/MISTAKE/BLUNDER on clamped centipawn loss, plus Lichess-formula accuracy. 14 unit tests. |
 | 3 | Backend ECO lookup: static JSON, opening identification | ❌ | `feature/analysis` | Not started |
-| 4 | Frontend analysis board: step through moves, eval bar | ❌ | `feature/analysis` | Not started |
-| 5 | Frontend post-game: auto-trigger, accuracy modal, link | ❌ | `feature/analysis` | Not started |
+| 4 | Frontend analysis board: step through moves, eval bar | ✅ | `feature/analysis-ui` | `pages/GameReview.tsx` at `/review/:gameId`. Board replayed from the stored SAN, arrow keys + buttons + clickable move list, eval bar off `evalCp`, `?!`/`?`/`??` annotation in the move list, per-player accuracy with a classification tally, engine suggestion ringed on the board. |
+| 5 | Frontend post-game: auto-trigger, accuracy modal, link | ✅ | `feature/analysis-ui` | Opening a review queues its own sweep and polls. Review links from every game-history row and from the game-over modal (`game_over` now carries the persisted `gameId`). Accuracy is a panel on the page rather than a modal — a modal you dismiss to reach the board it describes is the wrong shape. |
 
 ---
 
@@ -183,9 +183,9 @@
 | Puzzles | 0 | 5 | 0% |
 | Social | 0 | 5 | 0% |
 | Notifications | 0 | 4 | 0% |
-| Analysis | 2 | 5 | 40% |
+| Analysis | 4 | 5 | 80% |
 | Frontend UI | 0 | 6 | 0% |
-| **Total** | **18** | **51** | **35%** |
+| **Total** | **20** | **51** | **39%** |
 
 Leaderboard Inc 2 + 3 shipped in `8e1a6d6` but this table still read 1/3 until
 2026-08-16.
@@ -197,6 +197,8 @@ lookup, analysis board, post-game modal) are still open.
 
 The **Total** row did not add up before this pass either: the rows above it summed
 to 15 while the total read 11. It is a plain sum of the column now.
+
+Analysis 3 (ECO opening naming) is the only piece of that feature still open.
 
 ---
 

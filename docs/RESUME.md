@@ -61,7 +61,7 @@ scope cut (ADR-0032).
 | Leaderboard | `backend/src/leaderboard/` | ✅ | All-time / week / month boards, 60s cache, own-rank, reseed-from-Postgres on boot |
 | Users | `backend/src/users/` | ✅ | Public profile, per-variant stats, player directory (`GET /users`), `PATCH /users/me` |
 | Common | `backend/src/common/` | ✅ | Prisma, Redis, Glicko-2 (`elo.ts`), CORS parsing |
-| Analysis | `backend/src/analysis/` | ✅ | Depth-18 post-game sweep, move classification, per-player accuracy, stored in `GameAnalysis`. Engine is Stockfish 18 lite WASM as a **child process** speaking UCI over stdio — see the ADR-0009 note below. **No frontend calls it yet.** |
+| Analysis | `backend/src/analysis/` | ✅ | Depth-18 post-game sweep, move classification, per-player accuracy, stored in `GameAnalysis`. Engine is Stockfish 18 lite WASM as a **child process** speaking UCI over stdio — see the ADR-0009 note below. |
 | Chat / Notifications / Puzzles / Tournaments / Social | — | ❌ | Cut by ADR-0032; see `docs/FUTURE_SCOPE.md` |
 
 **Two engines, on purpose.** Computer *opponent* moves run as WASM in the
@@ -84,7 +84,8 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 | ChessGame component | `frontend/src/components/ChessGame.tsx` | ✅ | Optimistic moves, auto-queen promotion, re-joins the room on reconnect, colour lock, draw split UI, rematch flow |
 | Lobby / Matchmaking | `frontend/src/pages/Lobby.tsx` | ✅ | Quick match (live queue position) / friend challenge / vs-computer; `/challenge/:token` accept page |
 | Leaderboard page | `frontend/src/pages/Leaderboard.tsx` | ✅ | Variant tabs + period filter + own-rank row |
-| GameHistory page | `frontend/src/pages/GameHistory.tsx` | ✅ | Wired to `GET /games/history/:userId` |
+| GameHistory page | `frontend/src/pages/GameHistory.tsx` | ✅ | Wired to `GET /games/history/:userId`; every row links into the review |
+| Game review page | `frontend/src/pages/GameReview.tsx` | ✅ | `/review/:gameId` — eval bar, step-through board, annotated move list, per-player accuracy. Queues its own analysis on open. |
 | Profile page | `frontend/src/pages/Profile.tsx` | ✅ | Real per-variant ratings, W/L/D and recent games; `/profile/edit` saves via `PATCH /users/me`. No avatar upload. |
 | Player directory | `frontend/src/components/PlayerList.tsx` | ✅ | Wired to `GET /users` |
 | Home page | `frontend/src/pages/Home.tsx` | Partial | Hero + mode cards; no puzzle widget or activity feed (both deferred) |
@@ -102,7 +103,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 
 | Severity | Location | Description |
 |---|---|---|
-| Low | frontend | Analysis has no UI. `POST/GET /analysis/:gameId` work and nothing in `frontend/src` calls them — that is Analysis increments 4 + 5. |
+| Low | — | No ECO opening naming (Analysis increment 3). Games show a move list, never "Sicilian, Najdorf". |
 | Low | `frontend/src/components/ChessGame.tsx` | Promotion is auto-queen — there is no promotion picker. |
 
 _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emitted — the whole server-side computer-move path is gone; the engine now runs in the browser per ADR-0009._
@@ -126,7 +127,7 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Socket + REST contracts | `frontend/src/types.ts` |
 | Docker services | `docker-compose.yml` |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
-| Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-analysis.mjs` |
+| Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-*.mjs` |
 | Engine copy script | `frontend/scripts/copy-engine.mjs` (runs on `predev`/`prebuild`; `public/engine/` is gitignored) |
 | Full API reference | `docs/architecture/api-reference.md` |
 | WebSocket events | `docs/architecture/websocket-events.md` |
@@ -179,6 +180,8 @@ an empty value means "same origin".
 
 ---
 
-_Last updated: 2026-09-07 (Stockfish Increment 2: server-side post-game analysis).
+_Last updated: 2026-09-08 (Analysis increments 4 + 5: the review page, plus the
+first real browser walk-through of every route).
+Previous: 2026-09-07 Stockfish Increment 2, server-side post-game analysis.
 Previous: 2026-08-16 pre-Increment-2 hardening (security, game-path, UI and docs;
 ports/env corrected to 3100 + VITE_SERVER_URL)._

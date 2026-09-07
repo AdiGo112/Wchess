@@ -582,6 +582,9 @@ export class GameGateway
 
     this.server.to(room.id).emit('game_over', {
       roomId: room.id,
+      // The persisted Game id, so the client can link straight into a review.
+      // null for vs-computer games, which are never saved.
+      gameId: ratingChanges?.game?.id ?? null,
       result: result.toLowerCase(),
       reason: reason.toLowerCase(),
       ratingChange: ratingChanges

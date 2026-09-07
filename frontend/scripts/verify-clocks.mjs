@@ -4,6 +4,7 @@
 //  C. grace: move landing just after 0 but within 500ms is accepted
 //  D. CAS: double-resign race settles the game exactly once
 //  E. flagged game is persisted + rated (the original bug: never saved)
+//  F. game_over carries the persisted Game id, so the client can link to a review
 import { io } from 'socket.io-client';
 
 const API = 'http://localhost:3100/api/v1';
@@ -81,6 +82,15 @@ const s2 = await connect(u2.accessToken);
   check('E: flagged game persisted + rated', !!over?.ratingChange &&
     typeof over.ratingChange.white.change === 'number',
     JSON.stringify(over?.ratingChange?.white));
+  // The review link in the game-over modal is dead without this id.
+  check('F: game_over carries the persisted Game id', typeof over?.gameId === 'string' && over.gameId.length > 0,
+    `gameId=${over?.gameId}`);
+  if (over?.gameId) {
+    const res = await fetch(`${API}/analysis/${over.gameId}`);
+    const json = await res.json();
+    check('F2: that id is analysable', res.status === 200 && ['none', 'running', 'done'].includes(json.status),
+      `status=${json.status}`);
+  }
   s1.off('clock_sync'); s1.off('game_over');
 }
 
