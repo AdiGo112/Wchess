@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { GamesModule } from './games/games.module';
 import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { AnalysisModule } from './analysis/analysis.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
     GamesModule,
     MatchmakingModule,
     LeaderboardModule,
+    AnalysisModule,
   ],
   providers: [
     // Actually enforce the ThrottlerModule config above on every HTTP route.

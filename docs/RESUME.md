@@ -61,8 +61,15 @@ scope cut (ADR-0032).
 | Leaderboard | `backend/src/leaderboard/` | ✅ | All-time / week / month boards, 60s cache, own-rank, reseed-from-Postgres on boot |
 | Users | `backend/src/users/` | ✅ | Public profile, per-variant stats, player directory (`GET /users`), `PATCH /users/me` |
 | Common | `backend/src/common/` | ✅ | Prisma, Redis, Glicko-2 (`elo.ts`), CORS parsing |
-| Stockfish (analysis) | — | ❌ | Deleted from the backend. Computer moves run as WASM **in the browser** (ADR-0009) via the `computer_move` socket event. Server-side analysis is Increment 2 and starts from nothing. |
+| Analysis | `backend/src/analysis/` | ✅ | Depth-18 post-game sweep, move classification, per-player accuracy, stored in `GameAnalysis`. Engine is Stockfish 18 lite WASM as a **child process** speaking UCI over stdio — see the ADR-0009 note below. **No frontend calls it yet.** |
 | Chat / Notifications / Puzzles / Tournaments / Social | — | ❌ | Cut by ADR-0032; see `docs/FUTURE_SCOPE.md` |
+
+**Two engines, on purpose.** Computer *opponent* moves run as WASM in the
+player's browser (ADR-0009) so they cost the server nothing. Post-game
+*analysis* cannot work that way — every viewer would re-derive the same numbers,
+and a client-submitted verdict on a shared game row is unauthenticated data — so
+the server runs the same wasm build in a child process. Same binary, opposite
+reasons.
 
 ### Frontend — what exists
 
@@ -95,7 +102,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 
 | Severity | Location | Description |
 |---|---|---|
-| Medium | — | No post-game analysis at all. The backend `stockfish/` module was deleted in the v1 scope cut; Increment 2 builds it from scratch and must first decide how the server gets an engine (native binary vs. the same WASM under Node). |
+| Low | frontend | Analysis has no UI. `POST/GET /analysis/:gameId` work and nothing in `frontend/src` calls them — that is Analysis increments 4 + 5. |
 | Low | `frontend/src/components/ChessGame.tsx` | Promotion is auto-queen — there is no promotion picker. |
 
 _Fixed 2026-07-12: the `computer-move` job whose result was logged but never emitted — the whole server-side computer-move path is gone; the engine now runs in the browser per ADR-0009._
@@ -112,12 +119,14 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | NestJS entry | `backend/src/main.ts` |
 | Game Gateway | `backend/src/games/game.gateway.ts` |
 | Glicko-2 util | `backend/src/common/utils/elo.ts` |
+| Analysis engine + queue | `backend/src/analysis/analysis.service.ts` |
+| Move classification + accuracy maths | `backend/src/analysis/classify.ts` (unit tests beside it) |
 | Axios client + refresh interceptors | `frontend/src/api.ts` |
 | Socket context | `frontend/src/context/SocketContext.tsx` |
 | Socket + REST contracts | `frontend/src/types.ts` |
 | Docker services | `docker-compose.yml` |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
-| Live verification scripts | `frontend/scripts/verify-*.mjs` |
+| Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-analysis.mjs` |
 | Engine copy script | `frontend/scripts/copy-engine.mjs` (runs on `predev`/`prebuild`; `public/engine/` is gitignored) |
 | Full API reference | `docs/architecture/api-reference.md` |
 | WebSocket events | `docs/architecture/websocket-events.md` |
@@ -170,5 +179,6 @@ an empty value means "same origin".
 
 ---
 
-_Last updated: 2026-08-16 (pre-Increment-2 hardening pass: security, game-path,
-UI and docs; ports/env corrected to 3100 + VITE_SERVER_URL)_
+_Last updated: 2026-09-07 (Stockfish Increment 2: server-side post-game analysis).
+Previous: 2026-08-16 pre-Increment-2 hardening (security, game-path, UI and docs;
+ports/env corrected to 3100 + VITE_SERVER_URL)._

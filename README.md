@@ -21,12 +21,15 @@ React + TypeScript · NestJS · PostgreSQL · Redis · Socket.io · Stockfish WA
 | Database | PostgreSQL 16 via Prisma ORM |
 | Cache / real-time state | Redis 7 via ioredis (game rooms, queues, leaderboards, clock deadlines) |
 | Real-time | Socket.io (single default namespace) |
-| Engine | Stockfish 18 lite, WASM in a browser Web Worker (ADR-0009) |
+| Engine (opponent) | Stockfish 18 lite, WASM in a browser Web Worker (ADR-0009) |
+| Engine (analysis) | The same WASM build, as a server child process over UCI |
 | Infrastructure | Docker Compose (PostgreSQL + Redis) |
 
 MongoDB and BullMQ were **removed** in the v1 scope cut — deleting chat and
 notifications removed the only Mongo consumers, and the client-side engine
-removed the only queue consumer. Neither is a dependency any more.
+removed the only queue consumer. Neither is a dependency any more. Post-game
+analysis, the one job-shaped workload that came back, runs as a promise chain
+over a single out-of-process engine and stores its results in Postgres.
 
 ---
 
@@ -74,6 +77,7 @@ node frontend/scripts/verify-clocks.mjs        # server clocks, 8/8
 node frontend/scripts/verify-leaderboard.mjs   # period boards, 16/16
 node frontend/scripts/verify-join-authz.mjs    # join_room authz, 2/2
 node frontend/scripts/verify-hardening.mjs     # pre-Inc-2 hardening pass
+node backend/scripts/verify-analysis.mjs      # post-game analysis, 14/14
 ```
 
 ---
@@ -95,11 +99,13 @@ WChess/
 │       └── types.ts            — socket + REST contracts
 └── backend/                    — NestJS
     ├── prisma/schema.prisma    — PostgreSQL models
+    ├── scripts/                — live verification scripts
     └── src/
         ├── auth/               — JWT register/login/refresh/logout
         ├── games/              — game lifecycle + Socket.io gateway + clocks
         ├── matchmaking/        — Redis queue pairing, challenges, vs-computer
         ├── leaderboard/        — Redis sorted sets (all / week / month)
+        ├── analysis/           — depth-18 post-game sweep, out-of-process engine
         ├── users/              — profiles, stats, player directory
         └── common/             — Prisma, Redis, Glicko-2, CORS helpers
 ```
@@ -116,11 +122,13 @@ WChess/
 - Computer opponent — Stockfish WASM in the player's own browser, 5 difficulties (ADR-0009)
 - Leaderboards (all-time / weekly / monthly) via Redis sorted sets, 60s read cache
 - Game history with PGN export
+- Post-game analysis — depth-18 sweep, per-move classification, per-player accuracy
+  (API only; no UI yet)
 - Monochrome neo-brutalist UI
 
 ## Deferred (ADR-0032)
 
-Post-game analysis, tournaments, puzzles, social graph, chat, notifications.
+Tournaments, puzzles, social graph, chat, notifications.
 See `docs/FUTURE_SCOPE.md`.
 
 ---

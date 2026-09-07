@@ -124,13 +124,30 @@ model Game {
   tournamentId    String?
   createdAt       DateTime    @default(now())
 
-  whitePlayer  User?       @relation("WhitePlayer", fields: [whiteId], references: [id])
-  blackPlayer  User?       @relation("BlackPlayer", fields: [blackId], references: [id])
-  tournament   Tournament? @relation(fields: [tournamentId], references: [id])
+  whitePlayer  User?         @relation("WhitePlayer", fields: [whiteId], references: [id])
+  blackPlayer  User?         @relation("BlackPlayer", fields: [blackId], references: [id])
+  tournament   Tournament?   @relation(fields: [tournamentId], references: [id])
+  analysis     GameAnalysis?
 
   @@index([whiteId, createdAt(sort: Desc)])
   @@index([blackId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+}
+
+/// Post-game Stockfish analysis, one row per game (Stockfish Increment 2).
+/// Computed once and cached forever: the same moves at the same depth always
+/// score the same, so a second viewer costs zero engine time.
+model GameAnalysis {
+  gameId        String   @id
+  depth         Int
+  /// Per-ply results: { ply, san, evalCp, mate, bestMove, cpLoss, classification }
+  moves         Json
+  accuracyWhite Float
+  accuracyBlack Float
+  engine        String   @default("stockfish-18-lite")
+  createdAt     DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 }
 
 enum GameResult {
