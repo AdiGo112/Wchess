@@ -1,147 +1,100 @@
 # Docker Setup
 
-All three databases run locally via Docker Compose. One command starts everything.
+Two databases run locally via Docker Compose: **PostgreSQL 16** and **Redis 7**.
+The app itself does not run in Docker — it runs on the host, against these.
+
+The compose file is `../../docker-compose.yml`. It is not reproduced here; an
+inlined copy in a doc is a copy that goes stale, and this one had been
+advertising a MongoDB service for months after Mongo left the stack (2026-07-19).
 
 ---
 
-## docker-compose.yml (repo root)
-
-```yaml
-version: '3.9'
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB:       chessweb
-      POSTGRES_USER:     chess
-      POSTGRES_PASSWORD: chess123
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chess -d chessweb"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodata:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  pgdata:
-  mongodata:
-  redisdata:
-```
-
----
-
-## Start / Stop
+## Start / stop
 
 ```bash
-# Start all three databases (detached)
-docker compose up -d
-
-# Check all are healthy
-docker compose ps
-
-# Stop (keep data)
-docker compose stop
-
-# Stop + delete volumes (wipe data)
-docker compose down -v
-
-# View logs
-docker compose logs postgres
-docker compose logs mongo
-docker compose logs redis
+docker compose up -d       # start both, detached
+docker compose ps          # check both are healthy
+docker compose stop        # stop, keep the data
+docker compose down -v     # stop AND wipe the volumes
+docker compose logs -f postgres
+docker compose logs -f redis
 ```
+
+Both services declare healthchecks, so `docker compose ps` showing `healthy` —
+not just `running` — is what "ready" means.
 
 ---
 
-## First-time setup
+## First time
 
 ```bash
-# 1. Start databases
 docker compose up -d
-
-# 2. Wait for postgres to be ready, then run Prisma migration
 cd backend
-npx prisma migrate dev --name init
-
-# 3. Verify connection
-npx prisma studio        # Opens Prisma Studio in browser
-
-# 4. (Optional) Seed test data
-npx ts-node prisma/seed.ts
+cp .env.example .env       # then fill in JWT_SECRET
+npx prisma migrate dev     # applies all 4 migrations
+npx prisma studio          # optional — browse the data
 ```
+
+**There is no seed script.** `backend/package.json` has no `prisma.seed` entry
+and `prisma/seed.ts` does not exist. Register users through the app, or through
+one of the `verify-*.mjs` scripts.
 
 ---
 
-## Connecting to databases manually
+## Connecting by hand
+
+The compose file pins container names, so these are stable:
 
 ```bash
-# PostgreSQL
-docker exec -it chessweb-postgres-1 psql -U chess -d chessweb
-
-# MongoDB
-docker exec -it chessweb-mongo-1 mongosh chessweb
-
-# Redis
-docker exec -it chessweb-redis-1 redis-cli
+docker exec -it chessweb_postgres psql -U chess -d chessweb
+docker exec -it chessweb_redis redis-cli
 ```
 
 ---
 
-## Prisma migrations workflow
+## What is safe to wipe
+
+| Store | Wiping costs you |
+|---|---|
+| **Redis** | In-flight games only. Queues, presence and socket routing are rebuilt by reconnecting clients, and the leaderboard reseeds itself from Postgres on boot. |
+| **PostgreSQL** | Everything. Users, games, ratings, analyses. `down -v` is not recoverable. |
+
+`docker compose down -v` drops both volumes. If you meant "restart the
+databases", that is `docker compose restart`.
+
+---
+
+## Prisma migration workflow
 
 ```bash
-# Create new migration after schema change
-npx prisma migrate dev --name <describe_change>
-
-# Apply migrations in production
-npx prisma migrate deploy
-
-# Generate Prisma Client (after schema change)
-npx prisma generate
-
-# Reset DB (wipes data + re-runs all migrations)
-npx prisma migrate reset
+npx prisma migrate dev --name <describe_change>   # create + apply in dev
+npx prisma migrate deploy                          # apply in production
+npx prisma generate                                # regenerate the client
+npx prisma migrate reset                           # wipe + replay every migration
 ```
+
+A schema change is not finished until `npx prisma generate` has run — the
+`@prisma/client` types are generated, not committed, which is why CI runs it
+before it typechecks anything (`ci-cd.md`).
 
 ---
 
-## Port summary
+## Ports
 
 | Service | Port | Connection string |
 |---|---|---|
 | PostgreSQL | 5432 | `postgresql://chess:chess123@localhost:5432/chessweb` |
-| MongoDB | 27017 | `mongodb://localhost:27017/chessweb` |
 | Redis | 6379 | `redis://localhost:6379` |
 | NestJS API | 3100 | `http://localhost:3100` |
-| React Dev | 5173 | `http://localhost:5173` |
+| Vite dev server | 5173 | `http://localhost:5173` |
+
+---
+
+## When it will not start
+
+| Symptom | Cause |
+|---|---|
+| `port is already allocated` | A local Postgres/Redis is already on 5432/6379. Stop it, or change the host-side port in `docker-compose.yml`. |
+| Backend boots, then `ECONNREFUSED 5432` | The containers are up but not yet `healthy`. Wait for the healthcheck. |
+| `Environment variable not found: DATABASE_URL` | `backend/.env` is missing — `cp .env.example .env`. |
+| Everything is up, the app is empty | Expected. There is no seed data. |

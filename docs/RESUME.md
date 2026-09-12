@@ -127,6 +127,10 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Socket context | `frontend/src/context/SocketContext.tsx` |
 | Socket + REST contracts | `frontend/src/types.ts` |
 | Docker services | `docker-compose.yml` |
+| CI pipeline | `.github/workflows/ci.yml` |
+| Pipeline + branch workflow | `docs/infrastructure/ci-cd.md` |
+| System design (start here) | `docs/architecture/overview.md` |
+| All 16 diagrams | `Diagrams.md` (repo root) |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
 | Board sizing (both board pages) | `frontend/src/hooks/useBoardFit.ts` |
 | Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-*.mjs` |
@@ -182,7 +186,12 @@ an empty value means "same origin".
 
 ---
 
-_Last updated: 2026-09-08 (Analysis increments 3, 4 and 5: ECO naming, the review page, plus the
+_Last updated: 2026-09-12 (`chore/ci-pipeline`: first CI pipeline — backend test+build,
+frontend typecheck+build, branch-promotion guard — plus a correction pass over the docs
+it exposed as stale. `docs/architecture/overview.md` is now the canonical system design;
+`docs/infrastructure/ci-cd.md` is new and carries the branch workflow.)_
+
+_Previous: 2026-09-08 (Analysis increments 3, 4 and 5: ECO naming, the review page, plus the
 first real browser walk-through of every route).
 Previous: 2026-09-07 Stockfish Increment 2, server-side post-game analysis.
 Previous: 2026-08-16 pre-Increment-2 hardening (security, game-path, UI and docs;

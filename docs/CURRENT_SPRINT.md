@@ -6,10 +6,16 @@
 ---
 
 ## Active Branch
-`feature/board-layout` — cut from `dev` on 2026-09-08 to rebuild the board
-pages around a full-height board. See **Currently In Progress** below.
+`chore/ci-pipeline` — cut from `dev` on 2026-09-12. First CI pipeline, plus the
+system-design and infrastructure docs it made obvious were lying. See
+**Currently In Progress** below.
 
 ## Previous Branch
+`feature/board-layout` — cut from `dev` on 2026-09-08 to rebuild the board pages
+around a full-height board. Merged (`468460f`, then `2aa8f99` easing the board off
+the hard left edge).
+
+## Earlier
 `dev`. Three feature branches merged in on 2026-09-08:
 
 | Merge | Branch | What |
@@ -160,6 +166,63 @@ ChessWeb → WChess (user-facing strings only; note the GitHub remote was alread
   - Build passes: 1777 modules, no errors
 
 ## Currently In Progress
+`chore/ci-pipeline` — **the repo gets a pipeline, and the docs stop lying.**
+
+There was no `.github/` at all. Twenty-two branches, a documented promotion order,
+and nothing checking either. Now:
+
+- `.github/workflows/ci.yml` — three jobs. **backend**: `npm ci` → `prisma generate`
+  → `npm test` (20 unit tests) → `npm run build` (`nest build` *is* the typecheck, so
+  a separate `tsc --noEmit` would be the same work twice). **frontend**: `npm ci` →
+  `npm run build` (prebuild copies the engine, then `tsc --noEmit && vite build`).
+  **promotion**: rejects a PR that skips a step — `main` takes only `staging` or
+  `hotfix/*`, `staging` takes only `dev`, `dev` takes anything. Branch names arrive
+  through `env:`, never interpolated into the shell, because a fork can name a branch
+  anything.
+- No Postgres or Redis service containers: both suites are pure units. `DATABASE_URL`
+  is a job env var only because Prisma must *resolve* it to parse the schema.
+- No lint job. `backend` has no ESLint config at all, and `frontend/eslint.config.js`
+  matches `**/*.{js,jsx}` — every source file has been `.ts`/`.tsx` since the TS
+  migration, so it lints zero files. A green job over nothing is worse than no job.
+- No deploy job. `staging` and `main` are branches, not servers.
+- `.github/pull_request_template.md` — the verification and docs checklist this
+  project has been running from memory.
+
+**Docs, which the pipeline made obvious were stale:**
+
+- `docs/architecture/overview.md` — rewritten. It still advertised MongoDB, BullMQ,
+  Zustand, React Query and five modules deleted by ADR-0032, and a 15-microservice
+  map that was never built. Now: the invariant, the real stack, the deployable shape,
+  the seven modules, store ownership, the four load-bearing mechanisms (CAS, the
+  deadline sweeper, the rating `$transaction`, Glicko-2), and the split trigger.
+  It indexes `Diagrams.md` rather than redrawing it.
+- `Diagrams.md` §15 — the keyspace map was missing `clock:deadlines`, the ZSET the
+  whole clock design rests on. Added.
+- `docs/infrastructure/ci-cd.md` — new. The pipeline, what is deliberately left out
+  and why, the branch workflow, the hotfix exception, and the branch-protection
+  settings that make the promotion job binding instead of advisory.
+- `docs/infrastructure/environment.md` — listed `MONGODB_URI` and `SENDGRID_API_KEY`
+  as **required**, plus `BULL_CONCURRENCY_*` and `STOCKFISH_BINARY_PATH`. None of
+  them are read anywhere. Rewritten against the actual `process.env` reads; adds
+  `FRONTEND_URL` and `VITE_PROXY_TARGET`, which were real and undocumented.
+- `docs/infrastructure/docker-setup.md` — inlined a stale copy of
+  `docker-compose.yml` (with a MongoDB service), wrong container names, and a seed
+  script that does not exist. Now points at the real compose file.
+- `docs/infrastructure/deployment.md` — sketched a CI YAML that did not exist; now
+  points at the one that does.
+- `docs/README.md` — said feature branches are cut from `main`. They have not been
+  since `dev` became the integration branch.
+
+**Verified:** `npm test` 20/20 and `nest build` clean on backend; `npm run build`
+clean on frontend — the exact commands CI runs, run locally first. The workflow YAML
+parses (js-yaml) and declares all three jobs. The promotion guard was extracted from
+the YAML and executed against all eight head/base pairs: 8/8 correct.
+
+**Not verified:** the pipeline has never run on GitHub. Nothing is pushed yet, and
+branch protection is a repo setting, not a file — until it is on, a red promotion
+check is advisory.
+
+## Previously In Progress
 `feature/board-layout` — **the board pages fill the screen and stop scrolling.**
 
 Asked for directly: the board was too small, the page scrolled, and the panels
@@ -524,9 +587,12 @@ _Nothing blocked._
 
 ## Next Up (in order)
 
-1. **Push, then `dev` → `staging` → `main`.** Nothing has been pushed since the
-   pre-Increment-2 hardening merge; three feature merges are sitting on `dev`
-   locally.
+1. **Promote: `dev` → `staging` → `main`.** `dev` and `origin/dev` are level, so
+   this is now two PRs, not a push. The first one also proves the pipeline — it has
+   never run on GitHub. Turn on branch protection for `staging` and `main` at the
+   same time (`docs/infrastructure/ci-cd.md` §5) or the promotion job stays
+   advisory.
+
 2. **Decide whether Playwright becomes a real devDependency.** It is installed
    unsaved right now, which means the two browser scripts only run for whoever
    installs it by hand. The optimistic-move and rematch paths still have no browser
@@ -538,22 +604,19 @@ _Nothing blocked._
    Query, sound, board themes, dark mode, mobile/a11y. See `docs/FUTURE_SCOPE.md`
    and pick, rather than assuming an order.
 
-## Branch Order (full sequence)
+## Branch Order
 ```
-plan → main
-main → feature/auth          (4 increments)
-main → feature/game-engine   (3 increments, depends on auth)
-main → feature/matchmaking   (3 increments, depends on game-engine)
-main → feature/stockfish     (4 increments, depends on game-engine)
-main → feature/leaderboard   (3 increments, depends on game-engine)
-main → feature/chat          (3 increments, depends on auth)
-main → feature/tournaments   (6 increments, depends on matchmaking)
-main → feature/puzzles       (5 increments, depends on auth)
-main → feature/social        (5 increments, depends on auth)
-main → feature/notifications (4 increments, depends on social)
-main → feature/analysis      (5 increments, depends on stockfish + game-engine)
-main → feature/frontend-ui   (6 increments, depends on all above)
+feature/*  fix/*  chore/*  docs/*  →  dev  →  staging  →  main
 ```
+Everything is cut from `dev` and merged back with `--no-ff`. `staging` and `main`
+move by merge only. `hotfix/*` is the one branch allowed to go straight to `main`,
+and is not finished until it is merged back into `dev` too.
+
+CI enforces the order on every PR. Rules and the branch-protection settings that
+make it binding: `docs/infrastructure/ci-cd.md`.
+
+The old `main → feature/<each of twelve>` list that lived here was the `plan`-branch
+sequence from before `dev` existed. Five of those twelve were cut by ADR-0032.
 
 ---
 

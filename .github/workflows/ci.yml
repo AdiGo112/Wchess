@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, staging, main]
+  pull_request:
+    branches: [dev, staging, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend — test + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Schema parsing resolves env("DATABASE_URL"); nothing connects. No DB service
+      # here because both suites are pure units — add postgres/redis when an e2e needs one.
+      DATABASE_URL: postgresql://chess:chess123@localhost:5432/chessweb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+      - run: npm run build          # nest build — typechecks and emits
+
+  frontend:
+    name: frontend — typecheck + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build          # prebuild copies the engine, then tsc --noEmit && vite build
+
+  promotion:
+    name: branch promotion order
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: feature/* -> dev -> staging -> main
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          case "$BASE:$HEAD" in
+            main:staging|main:hotfix/*|staging:dev) ;;
+            main:*|staging:*)
+              echo "::error::$HEAD -> $BASE breaks the promotion order."
+              echo "main accepts staging or hotfix/*; staging accepts dev; dev accepts anything."
+              exit 1 ;;
+          esac
