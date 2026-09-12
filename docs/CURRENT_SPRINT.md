@@ -188,6 +188,17 @@ and nothing checking either. Now:
 - `.github/pull_request_template.md` — the verification and docs checklist this
   project has been running from memory.
 
+- `.github/setup-branch-protection.sh` — a 5-stage wizard that applies the branch
+  protection the pipeline needs to be binding instead of advisory. Applies it via
+  `gh api` when the CLI is authenticated, offers `gh auth login`, and walks the web
+  UI when it is not. The three required check names are read out of `ci.yml` rather
+  than retyped, with a test asserting they match byte-for-byte — a check name off by
+  one character never reports, and the branch then blocks forever with no useful
+  error. Defaults suit a one-person project and are both asked about rather than
+  assumed: 0 required approvals (a PR is still mandatory, but a solo dev who must
+  approve their own PR can never merge) and admins not enforced (a broken pipeline
+  should not lock you out of your own `main`).
+
 **Docs, which the pipeline made obvious were stale:**
 
 - `docs/architecture/overview.md` — rewritten. It still advertised MongoDB, BullMQ,

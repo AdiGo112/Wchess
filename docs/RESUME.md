@@ -129,6 +129,7 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Docker services | `docker-compose.yml` |
 | CI pipeline | `.github/workflows/ci.yml` |
 | Pipeline + branch workflow | `docs/infrastructure/ci-cd.md` |
+| Branch-protection wizard | `.github/setup-branch-protection.sh` |
 | System design (start here) | `docs/architecture/overview.md` |
 | All 16 diagrams | `Diagrams.md` (repo root) |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
