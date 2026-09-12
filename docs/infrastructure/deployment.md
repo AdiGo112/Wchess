@@ -47,7 +47,7 @@ Ubuntu 22.04 VPS (8GB RAM, 4 vCPU)
 │   ├── api.chessweb.com  → localhost:3100  (NestJS)
 │   └── chessweb.com      → /var/www/chess/ (React build)
 ├── NestJS API            → PM2 process manager
-└── Docker Compose        → PostgreSQL, MongoDB, Redis
+└── Docker Compose        → PostgreSQL, Redis
 ```
 
 ### Nginx config (api.chessweb.com)
@@ -83,11 +83,10 @@ pm2 startup
 | Service | Provider | Notes |
 |---|---|---|
 | PostgreSQL | Supabase / Neon / RDS | Enable connection pooling (pgBouncer) |
-| MongoDB | MongoDB Atlas | Free tier M0 for dev, M10+ for prod |
 | Redis | Upstash / Redis Cloud | Upstash has per-request billing |
 | NestJS API | Railway / Render / ECS | Horizontal scaling via Redis adapter |
 | React Frontend | Vercel / Cloudflare Pages | CDN-distributed static assets |
-| Stockfish Worker | Separate EC2 / ECS task | CPU-bound — isolate from API |
+| Analysis engine | Same box as the API, for now | A Stockfish child process per sweep. CPU-bound — split it out when analysis latency starts hurting live games |
 
 ---
 
@@ -96,7 +95,7 @@ pm2 startup
 ```yaml
 Deployments:
   chessweb-api         → 3+ replicas, HPA on CPU
-  chessweb-stockfish   → 2+ replicas, BullMQ concurrency
+  chessweb-sockets     → the gateway layer, split per ADR-0032 / Diagrams.md §16b
 
 Services:
   ClusterIP for internal
@@ -110,26 +109,15 @@ Socket.io horizontal scaling requires `@socket.io/redis-adapter` (already wired 
 
 ---
 
-## CI/CD (GitHub Actions — minimal)
+## CI/CD
 
-```yaml
-# .github/workflows/ci.yml
-on: [push]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      postgres: { image: postgres:16, env: {...} }
-      redis:    { image: redis:7 }
-    steps:
-      - uses: actions/checkout@v4
-      - run: cd backend && npm ci && npm run test
-  build:
-    needs: test
-    steps:
-      - run: cd frontend && npm ci && npm run build
-      - run: cd backend  && npm ci && npm run build
-```
+Built, and living in `.github/workflows/ci.yml`. Three jobs — backend
+(test + build), frontend (typecheck + build), and a branch-promotion guard.
+There is no deploy job, because there is no environment to deploy to yet.
+
+See **[`ci-cd.md`](./ci-cd.md)** for what each step checks, what is deliberately
+left out, and the `feature/* → dev → staging → main` workflow the pipeline
+enforces.
 
 ---
 

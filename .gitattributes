@@ -1,0 +1,10 @@
+# Anything the Linux CI runner executes must stay LF, whatever a Windows editor
+# or core.autocrlf does to the working copy. A `run:` block checked out with CRLF
+# hands bash a trailing \r on every line — `case` patterns stop matching and the
+# failure reads as a logic bug, not a line-ending one.
+/.github/**  text eol=lf
+*.sh         text eol=lf
+*.mjs        text eol=lf
+
+# Scoped deliberately. A repo-wide `* text=auto` would renormalize every tracked
+# file in one commit and bury the next real diff.
