@@ -81,6 +81,10 @@ accepts only `staging` or `hotfix/*`, `staging` accepts only `dev`, and `dev`
 accepts anything. Branch names arrive through `env:`, never interpolated into
 the shell, because a fork can name a branch anything.
 
+This job reports status but cannot block a merge on its own — see §5 for the
+branch protection that makes it binding, and `.github/setup-branch-protection.sh`
+to apply it.
+
 ### Node version
 
 Pinned to `24`, matching the development machine. The README's "Node 20+" is the
@@ -111,13 +115,64 @@ step that only exists on the runner.
 
 ---
 
-## 5 · Branch protection (GitHub settings — not in this repo)
+## 5 · Branch protection
 
-The pipeline reports status; it cannot block a merge on its own. On GitHub, for
-`main` and `staging`:
+The pipeline reports status; it cannot block a merge on its own. Until the rules
+below are on, the `promotion` job is **advisory** — a red X the author can merge
+straight past.
 
-- Require a pull request before merging
-- Require status checks: `backend — test + build`, `frontend — typecheck + build`, `branch promotion order`
-- Require branches to be up to date before merging
+Run the wizard:
 
-Without those, the `promotion` job is advisory — a red X the author can merge past.
+```bash
+bash .github/setup-branch-protection.sh
+```
+
+Five stages. It applies the settings through `gh api` if the GitHub CLI is
+authenticated, and walks you through the web UI if it is not — offering
+`gh auth login` in between. It reads the three check names out of the workflow
+rather than restating them, so they cannot drift apart.
+
+What it sets, on both `main` and `staging`:
+
+| Setting | Value |
+|---|---|
+| Require a pull request before merging | on, **0 required approvals** |
+| Require status checks to pass | `backend — test + build`, `frontend — typecheck + build`, `branch promotion order` |
+| Require branches to be up to date | on |
+| Force pushes / deletions | off |
+| Enforce on admins | off by default — the wizard asks |
+
+**Why 0 required approvals.** A PR is still mandatory, but this is a one-person
+project: a rule that demands someone *else* approve means nothing ever merges.
+Raise it the day there is a second developer.
+
+**Why admins are exempt by default.** Enforced-on-admins means a broken pipeline
+can lock you out of your own `main` until it goes green. The rules are there to
+stop an absent-minded merge, not to take away the keys. The wizard offers the
+strict setting if you want it.
+
+### Two things to know before running it
+
+**The `branch promotion order` check will not be in GitHub's picker yet.** That
+job is PR-only (`if: github.event_name == 'pull_request'`), so pushing to `dev`
+never triggers it, and GitHub only suggests checks it has seen report recently.
+Type the name by hand, or add it after the first PR. The wizard says so at the
+point it matters.
+
+**Classic branch protection may not be available.** On some private-repo plans
+the `branches/*/protection` API is refused; Rulesets (Settings → Rules) are the
+route there instead. The wizard names this as the first thing to check if the
+API call fails.
+
+### Proving it works
+
+Open a PR that *should* be rejected:
+
+```bash
+git push origin dev:refs/heads/tmp-promotion-check
+gh pr create --base main --head tmp-promotion-check --fill
+# expect: "branch promotion order" fails, merge blocked
+git push origin --delete tmp-promotion-check
+```
+
+A guard nobody has watched fail is a guard nobody knows the shape of.
