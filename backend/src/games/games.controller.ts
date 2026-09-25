@@ -19,6 +19,14 @@ export class GamesController {
     return this.gamesService.getHistory(userId, +page, Math.min(+limit, 50));
   }
 
+  // Declared before ':id' so "live" isn't swallowed as a game id.
+  @Get('live')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  getLive() {
+    return this.gamesService.liveGames();
+  }
+
   @Get(':id')
   getGame(@Param('id') id: string) {
     return this.gamesService.getGame(id);
