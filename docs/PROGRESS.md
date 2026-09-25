@@ -26,7 +26,7 @@
 | Notifications | backend built, no UI | low |
 | Puzzles | service + schema built, no UI, no dataset loaded | medium |
 | Tournaments | service + schema built, no UI, **no pairing algorithm** | high — the big one |
-| Spectate | handler deleted; count was broken (increment-only) | low |
+| Spectate | ✅ **shipped 2026-09-25** (`feature/spectate`) — `GET /games/live` + Lobby "Watch live" list + read-only board. No viewer count (the thing that was broken); add one via `io.in(room).fetchSockets()` if wanted | — |
 
 ---
 

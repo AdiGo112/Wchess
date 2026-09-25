@@ -21,6 +21,9 @@ cd backend && npx prisma migrate dev        # run migrations
 There is no seed script — `backend/package.json` has no `prisma.seed` entry and
 no `prisma/seed.ts` exists. Register users through the app or a verify script.
 
+**Latest (2026-09-25):** spectate shipped on `feature/spectate` — Lobby → *Watch live*. Verify with
+`node frontend/scripts/verify-spectate.mjs` against a running backend (9 checks).
+
 **One-port demo:** build the frontend (`cd frontend && npm run build`); the
 backend then serves the SPA, so everything is on `:3100`.
 

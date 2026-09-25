@@ -73,6 +73,19 @@ export interface GameStartPayload {
 export interface GameStatePayload extends Omit<GameStartPayload, 'timeControl' | 'increment'> {
   moves: string[];
   drawOfferedBy: Color | null;
+  /** Sent only to spectators, who may join a waiting or finished room. */
+  status?: 'waiting' | 'active' | 'ended';
+}
+
+/** GET /games/live — one row per spectatable game. */
+export interface LiveGame {
+  id: string;
+  white: RoomPlayer;
+  black: RoomPlayer | null;
+  timeControl: number;
+  increment: number;
+  moveCount: number;
+  startedAt: number;
 }
 
 export interface MoveMadePayload {

@@ -219,6 +219,9 @@ export class GameGateway
         moves: room.moves,
         drawOfferedBy: room.drawOfferedBy,
         difficulty: room.difficulty,
+        // A spectator can land on a waiting or finished room; the client must
+        // not tick a clock for either.
+        status: room.status,
       });
       return;
     }

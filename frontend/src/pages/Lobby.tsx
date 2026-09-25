@@ -1,12 +1,12 @@
-import { ReactNode, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { ReactNode, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Copy } from "lucide-react";
 import api from "../api";
 import useMatchmakingSocket from "../hooks/useMatchmakingSocket";
 import VariantSelector, { TIME_PRESETS, TimePreset } from "../components/VariantSelector";
 import DifficultySlider from "../components/DifficultySlider";
-import type { ChallengeCreatedResponse } from "../types";
+import type { ChallengeCreatedResponse, LiveGame } from "../types";
 
 function fmt(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -45,6 +45,16 @@ export default function Lobby() {
   const [difficulty, setDifficulty] = useState(3);
   const [computerPreset, setComputerPreset] = useState<TimePreset>(TIME_PRESETS[3]);
   const [starting, setStarting] = useState(false);
+
+  // Watch live — polled, not pushed: a list that is 10s stale costs nothing.
+  const [liveGames, setLiveGames] = useState<LiveGame[]>([]);
+  useEffect(() => {
+    const load = () =>
+      api.get<LiveGame[]>("/games/live").then(({ data }) => setLiveGames(data)).catch(() => {});
+    load();
+    const id = setInterval(load, 10_000);
+    return () => clearInterval(id);
+  }, []);
 
   const findGame = () => joinQueue({ timeControl: quickPreset.timeControl, increment: quickPreset.increment });
 
@@ -207,6 +217,43 @@ export default function Lobby() {
           </button>
         </Card>
       </div>
+
+      <section className="card-b mt-10">
+        <div className="flex items-baseline gap-2 mb-5">
+          <span className="font-display text-neutral-300 text-3xl leading-none select-none">04</span>
+          <h3 className="heading-b text-xl">Watch live</h3>
+        </div>
+        {liveGames.length === 0 ? (
+          <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest">
+            No games on right now
+          </p>
+        ) : (
+          <ul className="divide-y-[3px] divide-ink border-[3px] border-ink">
+            {liveGames.map((g) => (
+              <li key={g.id}>
+                <Link
+                  to={`/game/${g.id}`}
+                  className="flex flex-wrap justify-between items-center gap-2 px-3 py-2 hover:bg-neutral-100"
+                >
+                  <span className="font-bold text-sm truncate">
+                    {g.white.username} <span className="text-neutral-400">vs</span>{" "}
+                    {g.black?.username ?? "?"}
+                  </span>
+                  <span className="flex gap-3 items-center">
+                    <span className="tag-b font-mono normal-case">
+                      {fmt(g.timeControl)}+{g.increment}
+                    </span>
+                    <span className="text-xs font-mono text-neutral-500">
+                      move {Math.floor(g.moveCount / 2) + 1}
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-widest">Watch →</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

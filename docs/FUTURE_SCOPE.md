@@ -34,7 +34,7 @@ not new design.
   bell/dropdown UI. *(ADR-0024, ADR-0025)*
 - **Social graph** — friends, follows, Redis-TTL online presence, activity feed. *(ADR-0021,
   ADR-0022, ADR-0023)*
-- **Spectate mode** — read-only live game viewing (previously removed; count logic was broken).
+- ~~**Spectate mode**~~ — **shipped 2026-09-25** (`feature/spectate`). Lobby lists live games (`GET /games/live`); opening one is a read-only board fed by the existing room broadcasts. No viewer count.
 
 ### Frontend / UX maturity *(feature 12)*
 - Migrate state to **Zustand + React Query** (today: React Context + axios).

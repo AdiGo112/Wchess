@@ -108,6 +108,28 @@ export class GamesService {
     return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', '+inf');
   }
 
+  /**
+   * Games anyone can spectate right now. The deadline ZSET already holds exactly
+   * the active rooms, so no separate index is kept.
+   * ponytail: one GET per room — fine at hobby scale, MGET/pipeline if the list grows.
+   */
+  async liveGames() {
+    const rooms = await Promise.all((await this.watchedRooms()).map((id) => this.getRoom(id)));
+    return rooms
+      .filter((r): r is ActiveRoom => !!r && r.status === 'active')
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, 50)
+      .map((r) => ({
+        id: r.id,
+        white: r.whitePlayer,
+        black: r.blackPlayer,
+        timeControl: r.timeControl,
+        increment: r.increment,
+        moveCount: r.moves.length,
+        startedAt: r.startedAt,
+      }));
+  }
+
   async createRoom(
     whitePlayer: { id: string; username: string; rating: number },
     blackPlayer: { id: string; username: string; rating: number },

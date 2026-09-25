@@ -6,6 +6,26 @@
 ---
 
 ## Active Branch
+`feature/spectate` — cut from `dev` on 2026-09-25. Spectate mode, the first of the
+deferred features to come back.
+
+- **Backend:** `GET /games/live` (`GamesService.liveGames`) lists active rooms straight
+  from the `clock:deadlines` ZSET — no new index. `game_state` to a spectator now carries
+  `status`, so a spectator landing on a waiting/ended room doesn't run a phantom clock.
+  The rest already existed: non-players could join a room, got broadcasts, were rejected
+  on every action, and never armed the abandonment timer (`85ad525`).
+- **Frontend:** `ChessGame` derives `isSpectator` from the room's players: no drag, no
+  controls, no rematch, no engine (a spectator of a computer game used to spin up
+  Stockfish and relay moves the server rejected), neutral game-over headline. Lobby gets a
+  **Watch live** list polled every 10s.
+- **Verified 9/9 live** (`frontend/scripts/verify-spectate.mjs`): auth on the list, waiting
+  room hidden, active room listed, snapshot `status=active`, spectator sees `move_made`,
+  spectator move/resign/draw rejected, spectator disconnect arms nothing, ended game drops
+  off the list. Typecheck + Vite build clean. **Browser click-through not done.**
+- Skipped: viewer count (`io.in(room).fetchSockets().length` when wanted), push updates
+  for the list.
+
+## Previous Branch (before spectate)
 `chore/ci-pipeline` — cut from `dev` on 2026-09-12. First CI pipeline, plus the
 system-design and infrastructure docs it made obvious were lying. See
 **Currently In Progress** below.
@@ -611,7 +631,7 @@ _Nothing blocked._
    the walk-through.
 3. **Nothing else is queued.** All twelve v1 increments that ADR-0032 kept are
    done. What remains is the deferred set (chat, notifications, puzzles,
-   tournaments, social, spectate) and Frontend UI increments 1-6 — Zustand, React
+   tournaments, social; spectate shipped 2026-09-25) and Frontend UI increments 1-6 — Zustand, React
    Query, sound, board themes, dark mode, mobile/a11y. See `docs/FUTURE_SCOPE.md`
    and pick, rather than assuming an order.
 

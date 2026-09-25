@@ -54,7 +54,8 @@ owner's next login and on logout — there is no scheduled job.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/games/:id` | — | Single completed game by ID. Live games live in Redis and are not exposed here. |
+| GET | `/games/live` | ✓ | Active games anyone can spectate, newest first, max 50 → `[{ id, white, black, timeControl, increment, moveCount, startedAt }]`. Read from the `clock:deadlines` ZSET, so waiting and ended rooms never appear. Declared before `:id` so `live` isn't read as a game id. |
+| GET | `/games/:id` | — | Single completed game by ID. Live rooms are listed by `/games/live`; their state arrives over the socket. |
 | GET | `/games/history/:userId` | ✓ | Paginated history `?page=1&limit=20` (limit capped at 50) → `{ games, total, page, limit }` |
 
 `GET /games/history/:userId` requires auth. It was unguarded until the
