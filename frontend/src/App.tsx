@@ -17,6 +17,7 @@ import Puzzles from "./pages/Puzzles";
 import Tournaments from "./pages/Tournaments";
 import ProfileEdit from "./pages/ProfileEdit";
 import NotFound from "./pages/NotFound";
+import Settings from "./pages/Settings";
 
 // The window itself never scrolls: <main> is the scroll container, so a page
 // that fits the viewport (the board pages) scrolls nowhere at all, and every
@@ -58,6 +59,7 @@ export default function App() {
           {/* Coming-soon placeholders for features deferred by ADR-0032 */}
           <Route path="/puzzles" element={<Puzzles />} />
           <Route path="/tournaments" element={<Tournaments />} />
+          <Route path="/settings" element={<Settings />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>

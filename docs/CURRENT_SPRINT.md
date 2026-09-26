@@ -6,6 +6,28 @@
 ---
 
 ## Active Branch
+`feature/sound` — cut from `dev` on 2026-09-26. Game sounds + a Settings page.
+
+- `frontend/src/lib/sound.ts`: synthesized with the Web Audio API — no files to host or
+  license. move / capture / check (picked from the SAN), game start, game over, and a
+  low-time tick once per second while **your** clock is under 10s.
+- Played on the server's `move_made` echo, not the optimistic drop, so each move sounds
+  exactly once for players, the engine's replies, and spectators alike.
+- Mute toggle (🔊/🔇) in the game header; persisted in `localStorage` (`wchess.muted`),
+  wrapped in try/catch so private mode just doesn't persist.
+- **Four sound packs** — Béton (square, default), Wood (band-passed noise clicks), Soft
+  (sine), Arcade (triangle arpeggios). Each pack is plain note data in `PACKS`; adding one
+  is adding an object.
+- **New `/settings` page** (linked from the profile menu, desktop + mobile): sounds on/off,
+  pack picker (plays a preview on select), volume slider, preview buttons for all six
+  sounds. Keys: `wchess.soundPack`, `wchess.volume`, `wchess.muted`. Per-device on purpose —
+  move to the user record if prefs should follow the account.
+- Verified in headless Chromium: every pack emits exactly its defined note count for all
+  six sounds, pack + mute survive reload, 0 console errors. `tsc` + Vite build clean.
+  **Not heard by a human yet**, and ESLint crashes
+  loading its config (a pre-existing module-resolution error, unrelated).
+
+## Previous Branch (spectate)
 `feature/spectate` — cut from `dev` on 2026-09-25. Spectate mode, the first of the
 deferred features to come back.
 

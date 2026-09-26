@@ -7,6 +7,7 @@ import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
 import useBoardFit from "../hooks/useBoardFit";
+import { playMoveSound, playSound } from "../lib/sound";
 import type {
   ClockSyncPayload,
   Color,
@@ -147,6 +148,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
       if (user && data.black?.id === user.id) setOrientation("black");
       startClock();
+      playSound("start");
     });
 
     socket.on("move_made", (data: MoveMadePayload) => {
@@ -160,10 +162,14 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setMoveHistory((prev) => [...prev, data.move.san]);
       setDrawOfferedBy(data.drawOfferedBy ?? null);
       setLastMove({ from: data.move.from, to: data.move.to });
+      // Played on the server echo, not the optimistic drop, so every move —
+      // yours, theirs, the engine's, or one you're spectating — sounds once.
+      playMoveSound(data.move.san);
     });
 
     socket.on("game_over", (data: GameOverPayload) => {
       stopClock();
+      playSound("end");
       setGameOver(data);
       setStatus(`Game Over — ${data.result.toUpperCase()}`);
     });
@@ -247,6 +253,21 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
 
     return () => { cancelled = true; };
   }, [fen, difficulty, isSpectator, socket, roomId, gameOver, getBestMove]);
+
+  // Low-time tick: once per whole second while YOUR clock runs under 10s.
+  // Timers update from both the local interval and clock_sync, so dedupe on the
+  // displayed second rather than on every state change.
+  const lastTickRef = useRef<number | null>(null);
+  useEffect(() => {
+    const myColor = orientation === "white" ? "w" : "b";
+    const myMs = orientation === "white" ? timers.white : timers.black;
+    if (isSpectator || gameOver || turnRef.current !== myColor || myMs <= 0 || myMs >= 10_000) return;
+    const sec = Math.ceil(myMs / 1000);
+    if (sec !== lastTickRef.current) {
+      lastTickRef.current = sec;
+      playSound("tick");
+    }
+  }, [timers, orientation, isSpectator, gameOver]);
 
   const isDraggablePiece = useCallback(
     ({ piece }: { piece: string }) =>
