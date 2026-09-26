@@ -6,6 +6,12 @@
 ---
 
 ## Active Branch
+`fix/ci-eslint-peer` — cut from `dev` on 2026-09-26. **CI had failed on every push since it
+was added:** backend `npm ci` hit ERESOLVE — `eslint@9` installed, `@typescript-eslint@7.18`
+wants `eslint@^8`. Bumped `@typescript-eslint/*` to v8 (supports ESLint 9); clean `npm ci` +
+20/20 Jest + `nest build` pass locally. Note: the backend has **no ESLint config**, so
+`npm run lint` still does nothing useful — add `eslint.config.mjs` or drop the deps.
+
 `feature/sound` — cut from `dev` on 2026-09-26. Game sounds + a Settings page.
 
 - `frontend/src/lib/sound.ts`: synthesized with the Web Audio API — no files to host or
