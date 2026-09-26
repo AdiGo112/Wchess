@@ -697,6 +697,7 @@ flowchart LR
 
     subgraph ROOMS["🎮 Active games — the hot path"]
         R1["game:room:{roomId}<br/>─────────────<br/>STRING (JSON) · TTL 86400 s<br/>fen · moves[] · timers{w,b} ms ·<br/>status · drawOfferedBy ·<br/>rematchRequestedBy · difficulty?<br/><i>read+rewritten EVERY move</i>"]:::room
+        R2["clock:deadlines<br/>─────────────<br/>ZSET · score = epoch-ms deadline<br/>member = roomId · no TTL<br/>ZADD re-arms on every move ·<br/>ZREM when the room ends<br/><i>ONE sweeper over this set every 1 s,<br/>not one setInterval per game<br/>(ADR-0004 addendum)</i>"]:::room
     end
 
     subgraph QUEUES["🧲 Matchmaking"]

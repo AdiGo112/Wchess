@@ -34,11 +34,11 @@ not new design.
   bell/dropdown UI. *(ADR-0024, ADR-0025)*
 - **Social graph** — friends, follows, Redis-TTL online presence, activity feed. *(ADR-0021,
   ADR-0022, ADR-0023)*
-- **Spectate mode** — read-only live game viewing (previously removed; count logic was broken).
+- ~~**Spectate mode**~~ — **shipped 2026-09-25** (`feature/spectate`). Lobby lists live games (`GET /games/live`); opening one is a read-only board fed by the existing room broadcasts. No viewer count.
 
 ### Frontend / UX maturity *(feature 12)*
 - Migrate state to **Zustand + React Query** (today: React Context + axios).
-- Sound effects; **board themes + piece sets**; dark-mode polish; skeleton loaders / toasts.
+- ~~Sound effects~~ (**shipped 2026-09-26**, `feature/sound`: 11 synthesized packs incl. a spoken-moves Voice pack, 13 events, picked in `/settings`, volume, mute in the game header); **board themes + piece sets**; dark-mode polish; skeleton loaders / toasts.
 - **Mobile layout + accessibility** — touch board, keyboard shortcuts.
 
 ### Stack / infrastructure catch-up

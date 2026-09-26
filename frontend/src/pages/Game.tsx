@@ -1,6 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Volume2, VolumeX } from "lucide-react";
 import ChessGame from "../components/ChessGame";
+import { isMuted, setMuted } from "../lib/sound";
 
 interface GameLocationState {
   roomId?: string;
@@ -20,6 +22,11 @@ export default function Game() {
   // all board state rather than trying to reconcile it.
   const roomId = routeRoomId || state.roomId;
   const { mode, timeControl } = state;
+  const [muted, setMutedState] = useState(isMuted);
+  const toggleMute = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
+  };
 
   // Matchmaking now lives in the Lobby; the game page only renders a known room.
   useEffect(() => {
@@ -40,6 +47,14 @@ export default function Game() {
               {timeControl}s
             </span>
           )}
+          <button
+            onClick={toggleMute}
+            className="border-[3px] border-white bg-ink text-white p-1.5 hover:bg-white hover:text-ink transition-colors"
+            aria-label={muted ? "Unmute sounds" : "Mute sounds"}
+            title={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
           <button
             onClick={() => navigate("/")}
             className="border-[3px] border-white bg-ink text-white px-4 py-1.5 text-xs font-bold uppercase tracking-wider hover:bg-white hover:text-ink transition-colors"
