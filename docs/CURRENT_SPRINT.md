@@ -15,15 +15,29 @@
   exactly once for players, the engine's replies, and spectators alike.
 - Mute toggle (🔊/🔇) in the game header; persisted in `localStorage` (`wchess.muted`),
   wrapped in try/catch so private mode just doesn't persist.
-- **Four sound packs** — Béton (square, default), Wood (band-passed noise clicks), Soft
-  (sine), Arcade (triangle arpeggios). Each pack is plain note data in `PACKS`; adding one
-  is adding an object.
+- **Eleven sound packs**, designs taken from chess.com + lichess but **synthesized, not
+  copied** — chess.com's audio is proprietary, lichess's is AGPL / CC BY-NC-SA / non-free
+  (lila `COPYING.md`). Béton (default), Soft, Wood (≈ chess.com Default / lichess
+  Standard), Piano, Arcade (≈ NES), Metal, Marble, Nature (≈ Woodland), Space (≈
+  Futuristic), Robot, and **Voice** (≈ lichess Speech): `speechSynthesis` reads each move
+  aloud, "Knight takes e 5, check". Each pack is note data; the synth supports pitch
+  glides (`to`), inharmonic partials (`chord`) and band-passed noise.
+- **Thirteen events** (chess.com's + lichess's set): move, capture, castle, promote, check
+  (chess.com precedence: check > promote > castle > capture), illegal (client-side reject
+  or server `invalid_move`), game start, victory / defeat / draw (from the viewer's side;
+  spectators hear victory on a decisive result), low-time warning once when your clock
+  crosses 10s, a tick each second from 5s, and an offer sound when the opponent offers a
+  draw or rematch. Packs may omit events; castle/promote borrow the pack's move/check,
+  anything else falls back to Soft (which is complete — asserted).
+- `frontend/scripts/check-sound.mjs` (plain `node`, 36 assertions): SAN → sound
+  mapping, SAN → spoken words (it caught "Nbd2" → "Knight bd 2" and a "Knig ht" split),
+  Soft completeness.
 - **New `/settings` page** (linked from the profile menu, desktop + mobile): sounds on/off,
   pack picker (plays a preview on select), volume slider, preview buttons for all six
   sounds. Keys: `wchess.soundPack`, `wchess.volume`, `wchess.muted`. Per-device on purpose —
   move to the user record if prefs should follow the account.
-- Verified in headless Chromium: every pack emits exactly its defined note count for all
-  six sounds, pack + mute survive reload, 0 console errors. `tsc` + Vite build clean.
+- Verified in headless Chromium: all 11 packs × 13 events produce sound (143/143; Voice
+  speaks the sample SAN), pack + mute survive reload, 0 console errors. `tsc` + Vite build clean.
   **Not heard by a human yet**, and ESLint crashes
   loading its config (a pre-existing module-resolution error, unrelated).
 

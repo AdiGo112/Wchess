@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
-  PACKS,
+  EVENTS,
+  PACK_LIST,
   PackId,
-  SoundName,
   getPack,
   getVolume,
   isMuted,
@@ -11,8 +11,6 @@ import {
   setPack,
   setVolume,
 } from "../lib/sound";
-
-const PREVIEW: SoundName[] = ["move", "capture", "check", "start", "end", "tick"];
 
 export default function Settings() {
   const [pack, setPackState] = useState<PackId>(getPack);
@@ -26,7 +24,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h1 className="heading-b text-4xl md:text-5xl text-center mb-2">SETTINGS</h1>
       <p className="text-center mb-10">
         <span className="tag-b">saved on this device</span>
@@ -51,22 +49,27 @@ export default function Settings() {
 
         <fieldset disabled={muted} className={muted ? "opacity-40" : ""}>
           <legend className="label-b">Sound pack</legend>
-          <div className="grid sm:grid-cols-2 gap-3" role="radiogroup">
-            {(Object.keys(PACKS) as PackId[]).map((id) => (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" role="radiogroup">
+            {PACK_LIST.map(([id, def]) => (
               <button
                 key={id}
                 type="button"
                 role="radio"
                 aria-checked={pack === id}
                 onClick={() => choosePack(id)}
-                className={`text-left border-[3px] border-ink px-4 py-3 transition-all ${
+                className={`flex flex-col justify-start text-left border-[3px] border-ink px-4 py-3 transition-all ${
                   pack === id ? "bg-ink text-white shadow-brutal-sm" : "bg-white hover:shadow-brutal-sm"
                 }`}
               >
-                <span className="font-display uppercase block">{PACKS[id].label}</span>
+                <span className="font-display uppercase block">{def.label}</span>
                 <span className={`text-xs ${pack === id ? "text-neutral-300" : "text-neutral-500"}`}>
-                  {PACKS[id].blurb}
+                  {def.blurb}
                 </span>
+                {def.after && (
+                  <span className="block mt-1 text-[10px] font-mono uppercase tracking-wider text-neutral-400">
+                    after {def.after}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -91,14 +94,14 @@ export default function Settings() {
 
           <p className="label-b mt-6">Preview</p>
           <div className="flex flex-wrap gap-2">
-            {PREVIEW.map((name) => (
+            {EVENTS.map(([name, label]) => (
               <button
                 key={name}
                 type="button"
                 onClick={() => playSound(name)}
-                className="btn-b btn-b-sm capitalize"
+                className="btn-b btn-b-sm"
               >
-                ▶ {name}
+                ▶ {label}
               </button>
             ))}
           </div>

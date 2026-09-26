@@ -38,7 +38,7 @@ not new design.
 
 ### Frontend / UX maturity *(feature 12)*
 - Migrate state to **Zustand + React Query** (today: React Context + axios).
-- ~~Sound effects~~ (**shipped 2026-09-26**, `feature/sound`: 4 synthesized packs picked in `/settings`, volume, mute in the game header); **board themes + piece sets**; dark-mode polish; skeleton loaders / toasts.
+- ~~Sound effects~~ (**shipped 2026-09-26**, `feature/sound`: 11 synthesized packs incl. a spoken-moves Voice pack, 13 events, picked in `/settings`, volume, mute in the game header); **board themes + piece sets**; dark-mode polish; skeleton loaders / toasts.
 - **Mobile layout + accessibility** — touch board, keyboard shortcuts.
 
 ### Stack / infrastructure catch-up
