@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu, X, LogOut, User, ChevronDown } from "lucide-react";
+import { Menu, X, LogOut, User, ChevronDown, Settings as SettingsIcon } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 interface NavItem {
@@ -120,6 +120,15 @@ export default function Navbar() {
                     Profile
                   </button>
                   <button
+                    onClick={() => {
+                      navigate("/settings");
+                      setProfileOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-t-2 border-ink hover:bg-ink hover:text-white transition-colors"
+                  >
+                    Settings
+                  </button>
+                  <button
                     onClick={async () => {
                       await logout();
                       setProfileOpen(false);
@@ -185,6 +194,15 @@ export default function Navbar() {
                   className="btn-b w-full"
                 >
                   <User size={16} /> Profile
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/settings");
+                    setMenuOpen(false);
+                  }}
+                  className="btn-b w-full"
+                >
+                  <SettingsIcon size={16} /> Settings
                 </button>
                 <button
                   onClick={async () => {

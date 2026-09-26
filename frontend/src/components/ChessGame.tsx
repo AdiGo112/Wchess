@@ -7,6 +7,7 @@ import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
 import useBoardFit from "../hooks/useBoardFit";
+import { playMoveSound, playSound } from "../lib/sound";
 import type {
   ClockSyncPayload,
   Color,
@@ -97,7 +98,19 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   // can roll the board back to the last server-agreed state.
   const preMoveFenRef = useRef<string | null>(null);
 
-  const getBestMove = useStockfish(difficulty !== null, difficulty ?? 3);
+  // Known once the room's players arrive. Anyone else who opens /game/:id is
+  // watching: the server already rejects their moves/resigns, this just stops
+  // offering them the controls.
+  const isSpectator =
+    !!players.white && !!user && user.id !== players.white.id && user.id !== players.black?.id;
+  // The socket handlers below are bound once per room, so they read the viewer's
+  // side through a ref rather than a stale closure (for victory/defeat, offers).
+  const roleRef = useRef<Color | "spectator">("white");
+  roleRef.current = isSpectator ? "spectator" : orientation;
+
+  // Only the human player's browser runs the engine (ADR-0009) — a spectator's
+  // relayed move would be rejected anyway.
+  const getBestMove = useStockfish(difficulty !== null && !isSpectator, difficulty ?? 3);
   // The board fills the frame; everything else lives in the column beside it,
   // which never needs less than this many pixels to stay readable.
   const fit = useBoardFit(340);
@@ -139,6 +152,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
       if (user && data.black?.id === user.id) setOrientation("black");
       startClock();
+      playSound("start");
     });
 
     socket.on("move_made", (data: MoveMadePayload) => {
@@ -152,15 +166,26 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setMoveHistory((prev) => [...prev, data.move.san]);
       setDrawOfferedBy(data.drawOfferedBy ?? null);
       setLastMove({ from: data.move.from, to: data.move.to });
+      // Played on the server echo, not the optimistic drop, so every move —
+      // yours, theirs, the engine's, or one you're spectating — sounds once.
+      playMoveSound(data.move.san);
     });
 
     socket.on("game_over", (data: GameOverPayload) => {
       stopClock();
+      const role = roleRef.current;
+      playSound(
+        data.result === "draw" ? "draw"
+          : role === "spectator" || data.result === role ? "victory" : "defeat",
+      );
       setGameOver(data);
       setStatus(`Game Over — ${data.result.toUpperCase()}`);
     });
 
-    socket.on("draw_offered", (data: { byColor: Color }) => setDrawOfferedBy(data.byColor));
+    socket.on("draw_offered", (data: { byColor: Color }) => {
+      setDrawOfferedBy(data.byColor);
+      if (roleRef.current !== "spectator" && data.byColor !== roleRef.current) playSound("notify");
+    });
     socket.on("draw_declined", () => setDrawOfferedBy(null));
 
     socket.on("opponent_disconnected", (data: { grace: number }) => {
@@ -178,9 +203,14 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setMoveHistory(data.moves || []);
       setPlayers({ white: data.white, black: data.black });
       setDrawOfferedBy(data.drawOfferedBy ?? null);
-      setStatus("Game in progress");
       setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
-      startClock();
+      // `status` is only sent to spectators; a player's snapshot is always active.
+      if (data.status === "waiting") setStatus("Waiting for players...");
+      else if (data.status === "ended") setStatus("This game has ended");
+      else {
+        setStatus("Game in progress");
+        startClock();
+      }
     });
 
     // Revert the optimistic move: the server rejected it.
@@ -194,6 +224,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         setFen(previous);
         setLastMove(null);
       }
+      playSound("illegal");
       toast.error(data.reason || "Illegal move");
     });
 
@@ -201,7 +232,10 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     // interval only interpolates between these.
     socket.on("clock_sync", (data: ClockSyncPayload) => setTimers(data.timers));
 
-    socket.on("rematch_offered", (data: { byUserId: string }) => setRematchOfferedBy(data.byUserId));
+    socket.on("rematch_offered", (data: { byUserId: string }) => {
+      setRematchOfferedBy(data.byUserId);
+      if (roleRef.current !== "spectator" && data.byUserId !== user?.id) playSound("notify");
+    });
 
     socket.on("rematch_ready", (data: { roomId: string }) => navigate(`/game/${data.roomId}`));
 
@@ -219,7 +253,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   // vs-computer: think locally on black's turn, then relay the engine's move.
   // The server re-validates it (see GameGateway.handleComputerMove).
   useEffect(() => {
-    if (difficulty === null || !socket || !roomId || gameOver || fen === "start") return undefined;
+    if (difficulty === null || isSpectator || !socket || !roomId || gameOver || fen === "start") return undefined;
 
     const chess = new Chess(fen);
     if (chess.turn() !== "b" || chess.isGameOver()) return undefined;
@@ -233,11 +267,29 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     });
 
     return () => { cancelled = true; };
-  }, [fen, difficulty, socket, roomId, gameOver, getBestMove]);
+  }, [fen, difficulty, isSpectator, socket, roomId, gameOver, getBestMove]);
+
+  // Low time, chess.com-style: one warning as YOUR running clock crosses 10s,
+  // then a tick each second from 5s. Timers update from both the local interval
+  // and clock_sync, so dedupe on the displayed second, not on every state change.
+  const lastTickRef = useRef<number | null>(null);
+  useEffect(() => {
+    const myColor = orientation === "white" ? "w" : "b";
+    const myMs = orientation === "white" ? timers.white : timers.black;
+    if (myMs > 10_000) lastTickRef.current = null; // increment pulled us back out: re-arm
+    if (isSpectator || gameOver || turnRef.current !== myColor || myMs <= 0 || myMs > 10_000) return;
+    const sec = Math.ceil(myMs / 1000);
+    if (sec === lastTickRef.current) return;
+    const first = lastTickRef.current === null;
+    lastTickRef.current = sec;
+    if (first) playSound("lowTime");
+    else if (sec <= 5) playSound("tick");
+  }, [timers, orientation, isSpectator, gameOver]);
 
   const isDraggablePiece = useCallback(
-    ({ piece }: { piece: string }) => !gameOver && piece.startsWith(orientation === "white" ? "w" : "b"),
-    [gameOver, orientation],
+    ({ piece }: { piece: string }) =>
+      !gameOver && !isSpectator && piece.startsWith(orientation === "white" ? "w" : "b"),
+    [gameOver, isSpectator, orientation],
   );
 
   /* Optimistic move: apply locally first, then emit. The board is a controlled
@@ -247,7 +299,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
      server remains the only authority and `invalid_move` is the revert path. */
   const onDrop = useCallback(
     (sourceSquare: string, targetSquare: string) => {
-      if (!socket || !roomId || gameOver) return false;
+      if (!socket || !roomId || gameOver || isSpectator) return false;
 
       const chess = new Chess(fen === "start" ? undefined : fen);
       const isMyTurn =
@@ -265,9 +317,13 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       try {
         applied = chess.move({ from: sourceSquare, to: targetSquare, promotion });
       } catch {
+        playSound("illegal");
         return false; // chess.js throws on an illegal move
       }
-      if (!applied) return false;
+      if (!applied) {
+        playSound("illegal");
+        return false;
+      }
 
       preMoveFenRef.current = fen;
       turnRef.current = chess.turn();
@@ -278,7 +334,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       socket.emit("move", { roomId, from: sourceSquare, to: targetSquare, promotion });
       return true;
     },
-    [socket, roomId, gameOver, fen, orientation],
+    [socket, roomId, gameOver, isSpectator, fen, orientation],
   );
 
   /* Strict-mono square highlights:
@@ -346,8 +402,8 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     if (gameOver.result === "draw") return { glyph: "½–½", headline: "DEAD EVEN" };
     const userWon = (gameOver.result === "white" && orientation === "white") ||
                     (gameOver.result === "black" && orientation === "black");
-    if (userWon) return { glyph: "♛", headline: "EZ WIN" };
-    if (user) return { glyph: "♟", headline: "GG GO NEXT" };
+    if (!isSpectator && userWon) return { glyph: "♛", headline: "EZ WIN" };
+    if (!isSpectator && user) return { glyph: "♟", headline: "GG GO NEXT" };
     return {
       glyph: gameOver.result === "white" ? "♔" : "♚",
       headline: gameOver.result === "white" ? "WHITE WINS" : "BLACK WINS",
@@ -355,7 +411,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
   };
 
   const resultDisplay = getResultDisplay();
-  const canRematch = !!gameOver && !!players.black && players.black.id !== "computer";
+  const canRematch = !!gameOver && !isSpectator && !!players.black && players.black.id !== "computer";
 
   return (
     <div
@@ -418,12 +474,16 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         <PlayerBar
           player={bottomPlayer}
           ms={bottomTimer}
-          fallback={user?.username ?? "You"}
+          fallback={isSpectator ? "Waiting..." : (user?.username ?? "You")}
           urgent={bottomTimer < 30000 && !gameOver}
         />
 
+        {isSpectator && (
+          <p className="tag-b self-center">👁 Spectating</p>
+        )}
+
         {/* Game controls */}
-        {!gameOver && (
+        {!gameOver && !isSpectator && (
           <div className="flex gap-3">
             <button onClick={handleResign} className="btn-b btn-b-danger btn-b-sm flex-1">
               Resign
@@ -437,7 +497,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         )}
 
         {/* Draw offer — offerer side */}
-        {!gameOver && isOfferer && (
+        {!gameOver && !isSpectator && isOfferer && (
           <div className="card-b-flat text-center">
             <p className="text-xs font-bold uppercase tracking-widest mb-2">
               Draw offer pending<span className="animate-blink">_</span>
@@ -449,7 +509,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         )}
 
         {/* Draw offer — receiver side (inverted card = demands attention) */}
-        {!gameOver && isReceiver && (
+        {!gameOver && !isSpectator && isReceiver && (
           <div className="card-b-inverse text-center !p-4">
             <p className="font-display uppercase mb-3">Draw offered</p>
             <div className="flex gap-3">
@@ -492,7 +552,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
               <div className="flex gap-4 justify-center mb-6">
                 {(["white", "black"] as const).map((color) => {
                   const rc = gameOver.ratingChange![color];
-                  const isYou = orientation === color;
+                  const isYou = !isSpectator && orientation === color;
                   const up = rc.change >= 0;
                   return (
                     <div key={color} className={`border-[3px] border-ink px-4 py-2 ${isYou ? "bg-ink text-white" : "bg-white"}`}>
