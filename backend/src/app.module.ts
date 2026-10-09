@@ -28,7 +28,8 @@ import { HealthController } from './health.controller';
     // dist (harmless if absent).
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist'),
-      exclude: ['/api/(.*)', '/socket.io/(.*)'],
+      // Express 5 / path-to-regexp v8 syntax (NestJS 11): named wildcards, no regex groups.
+      exclude: ['/api/{*path}', '/socket.io/{*path}'],
     }),
 
     ThrottlerModule.forRoot([

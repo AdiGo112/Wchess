@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { RequestMethod } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -14,6 +15,8 @@ const maskUrl = (url = '') => url.replace(/(\/challenge\/)[^/?]+/, '$1:token');
  * route through this too (`app.useLogger` in main.ts).
  */
 export const loggerModule = LoggerModule.forRoot({
+  // Named wildcard (path-to-regexp v8); the library default '*' triggers Nest 11's legacy-route warning.
+  forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
   pinoHttp: {
     level: process.env.LOG_LEVEL ?? (isProd ? 'info' : 'debug'),
     transport: isProd
