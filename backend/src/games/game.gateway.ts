@@ -374,7 +374,7 @@ export class GameGateway
       }
       // Re-arm the deadline for the side now to move.
       await this.gamesService.setDeadline(room);
-    } catch (e) {
+    } catch {
       client.emit('invalid_move', { roomId: data.roomId, reason: 'Invalid move format' });
     }
   }

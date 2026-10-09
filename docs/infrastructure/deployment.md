@@ -123,6 +123,8 @@ enforces.
 
 ## Monitoring checklist (before go-live)
 
+The full, ordered pre-launch plan (security + ops) is **[`ship-plan.md`](./ship-plan.md)**.
+
 - [ ] Health endpoint: `GET /api/v1/health` → `{ status: "ok", db: "ok", redis: "ok" }`
 - [ ] Uptime monitoring (BetterUptime / UptimeRobot)
 - [ ] Error tracking (Sentry)

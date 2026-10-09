@@ -59,19 +59,21 @@ In-flight runs for the same ref are cancelled when a new commit arrives.
 |---|---|
 | `npm ci` | Lockfile-exact install. Fails if `package.json` and the lockfile disagree. |
 | `npx prisma generate` | `@prisma/client` types are generated, not committed — nothing typechecks without this. |
-| `npm test` | Jest: `classify.spec.ts` (move classification + accuracy) and `openings.spec.ts` (ECO matcher). 20 tests. |
+| `npm run lint` | ESLint 9 flat config (`eslint.config.mjs`): `js` + `@typescript-eslint` recommended, no type-aware rules (`nest build` already typechecks). Errors block; `no-explicit-any` is a warning (54 today, mostly Prisma enum casts) so CI stays green while they get paid down. |
+| `npm test` | Jest, 7 suites, 91 tests: game gateway (moves, clock + grace, flag-fall, resign/draw/timeout settle-once, spectators, abandonment, rematch, computer relay), games service (deadlines, live list, PGN, rating writes), matchmaking (ADR-0008 tolerance, pairing, challenges), auth (register, hashed refresh rotation, bans, logout), Glicko-2 + variant + CORS, `classify.spec.ts`, `openings.spec.ts`. |
 | `npm run build` | `nest build` — this is the typecheck. It fails on any type error, so a separate `tsc --noEmit` step would be the same work twice. |
 
 `DATABASE_URL` is set to the local-dev value as a job env var. Prisma needs to
 *resolve* `env("DATABASE_URL")` to parse the schema; nothing in this job opens a
-connection. No Postgres or Redis service container runs — both suites are pure
-units. Add the services the day an e2e test needs them, not before.
+connection. No Postgres or Redis service container runs — every suite is a pure
+unit — Redis and Prisma are in-memory fakes inside the specs. Add the services the day an e2e test needs them, not before.
 
 ### Job: `frontend`
 
 | Step | Why it is there |
 |---|---|
 | `npm ci` | As above. |
+| `npm test` | Vitest 2.1.9 (pinned: the last line on Vite 5). Pure helpers only — `utils/gameResult.test.ts`, `lib/sound.test.ts` (move-sound precedence, Voice wording, settings storage with and without `localStorage`). 21 tests. No DOM/component tests: the live `verify-*.mjs` scripts cover the UI. |
 | `npm run build` | Three things in one script: `prebuild` copies the Stockfish engine out of `node_modules` into `public/engine/` (which is gitignored, so CI must generate it), then `tsc --noEmit`, then `vite build`. |
 
 ### Job: `promotion`
