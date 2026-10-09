@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - run: npm run lint           # errors block; `any` is a warning (eslint.config.mjs)
       - run: npm test
       - run: npm run build          # nest build — typechecks and emits
 
@@ -47,6 +48,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test               # vitest: pure helpers (gameResult, sound)
       - run: npm run build          # prebuild copies the engine, then tsc --noEmit && vite build
 
   promotion:
