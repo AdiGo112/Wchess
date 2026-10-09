@@ -43,6 +43,7 @@ Branch: `chore/security-hardening` off `dev`. Ordered by risk.
 | 0.10 | **`forbidNonWhitelisted: true`** | `main.ts` | unknown body fields return 400; verify scripts still pass |
 | 0.11 | **`/api/v1/health`**: `{ status, db, redis }` with a `SELECT 1` and a `PING`. Free hosts need it for health checks, and uptime pingers use it | new `health.controller.ts` | returns 200 when both are up, 503 otherwise |
 | 0.12 | **Secrets check**: `git log --all -- '*.env'` is empty; `JWT_SECRET` ≥ 64 random chars in the host's secret store **[host]** | — | documented in `environment.md` |
+| 0.13 | **Logging**: JSON logs (Nest 11's `ConsoleLogger({ json: true })` if 0.1 lands on 11, so no new dependency; else `nestjs-pino`), a request id on every HTTP request and socket event, and **security events**: failed login, refused refresh, 429s, rejected socket actions (not a player, out of turn, bad payload). Never log tokens, passwords or emails. | `main.ts`, `auth.service.ts`, `game.gateway.ts` | a failed login and a rejected move each produce one searchable JSON line; `grep -i token` over a test run's logs finds nothing |
 
 Effort: about one focused day. 0.1 can grow if Nest needs a major bump. Everything else is a
 few lines.
@@ -68,7 +69,6 @@ few lines.
 ## Phase 2 — After launch (track, don't block)
 
 - Dependabot for both `package.json` files (security updates only, to keep the PR count small).
-- Security event logging: failed logins, refused refreshes, rejected socket actions. Never log tokens.
 - Account lockout after N failed logins (on top of 0.5's IP throttle).
 - Privacy policy + account deletion (you store email addresses; GDPR applies if EU users sign up).
 - A load test (k6) at ~100 concurrent games, so you know the free tier's ceiling before users find it.

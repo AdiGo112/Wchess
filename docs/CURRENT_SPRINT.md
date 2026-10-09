@@ -14,6 +14,14 @@
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`feature/lean-realtime` — cut from `dev` on 2026-10-09. ADR-0034: the clock sweeper sleeps until the
+earliest deadline instead of polling every second, and the per-second `clock_sync` is gone (clients
+count down by wall-clock time; join snapshots carry the live clock). Measured with the new
+`frontend/scripts/bench-live.mjs`: idle Redis 60 → 0/min, per waiting game 72 → 4 commands and
+120 → 0 socket messages per minute, flag-fall exact. Backend 96 Jest, `verify-clocks` 11/11 (B/B2/B3
+rewritten for the new contract). **Gotcha hit again:** `start:dev` on Windows left the old process on
+:3100 after a reload, so verify ran stale code. Run `node dist/main` (or kill :3100) before verifying.
+
 `chore/lint-and-frontend-tests` — cut from `dev` on 2026-10-09. (1) Ran the two Playwright scripts
 for the first time: `verify-pages` 16/16, `verify-review-ui` 22/22. (2) Backend `eslint.config.mjs`;
 `npm run lint` now runs in CI — 0 errors, 54 `any` warnings. (3) Frontend Vitest 2.1.9 + 21 tests

@@ -114,6 +114,12 @@ passes.
 
 ## Phase 7 — Live-play path (`feature/lean-realtime`)
 
+> **Clock part done 2026-10-09** ([ADR-0034](./ADR-0034-event-driven-clock-sweeper.md)): idle Redis 60 → 0
+> commands/min, per waiting game 72 → 4 commands and 120 → 0 socket messages per minute,
+> flag-fall exact instead of ≤ 1 s late. Measured by `frontend/scripts/bench-live.mjs`
+> (`bench/results/live-baseline.json` → `live-event-driven.json`). Matchmaking and the
+> `move_made` payload are still open; the matchmaking poll already costs 0 with empty queues.
+
 - Clock sweeper: `ZRANGEBYSCORE clock:deadlines -inf <now>`, only the expired rooms.
 - `clock_sync`: only on moves (clients already count down locally); keep a slow
   safety-net sync (e.g. every 10 s), not every 1 s.
@@ -138,9 +144,9 @@ Phase 0 harness ──► 7 realtime     (independent; worth doing early for fre
 Phase 7 may be pulled forward: the idle Redis traffic it removes is also a free-tier
 hosting risk (see `ship-plan.md`, "Free-tier risks").
 
-## Open questions for Adi
+## Decisions (2026-10-09)
 
-1. Is the benchmark a **headline** goal (product page, college report) or internal hygiene?
-   That decides whether Phase 0 gets a published write-up and charts.
-2. Is ≥ 98% agreement with depth 18 an acceptable definition of "no worse"?
-3. Phase 7 before or after the analysis phases?
+1. **Headline goal.** This is Adi's portfolio centerpiece, so every phase ships a published
+   before/after number, and Phase 0 gets a write-up with charts.
+2. *Open:* is ≥ 98% agreement with depth 18 an acceptable definition of "no worse"?
+3. **Phase 7 first.** Its clock part landed first (ADR-0034).
