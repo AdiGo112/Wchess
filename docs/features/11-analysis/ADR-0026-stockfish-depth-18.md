@@ -1,6 +1,6 @@
 # ADR-0026: Use Stockfish at Depth 18 for Post-Game Analysis
 
-**Status:** Accepted
+**Status:** Accepted · **Amended by** [ADR-0033](../../architecture/ADR-0033-position-keyed-eval-cache.md) (proposed): depth 18 becomes the ceiling for borderline plies, not the depth every ply gets
 **Date:** 2026-06-24
 
 ## Context

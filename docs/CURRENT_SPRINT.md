@@ -5,7 +5,20 @@
 
 ---
 
+## Next Up
+**Ship plan** — [`infrastructure/ship-plan.md`](infrastructure/ship-plan.md). Phase 0 (12 blockers) goes on
+`chore/security-hardening` off `dev`. The host is not chosen yet (Adi decides); the plan assumes one origin
+(backend serves the SPA) so the refresh-token cookie stays first-party.
+
+**Performance benchmark** — [`architecture/performance-plan.md`](architecture/performance-plan.md) + ADR-0033
+(proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
+
 ## Active Branch
+`chore/lint-and-frontend-tests` — cut from `dev` on 2026-10-09. (1) Ran the two Playwright scripts
+for the first time: `verify-pages` 16/16, `verify-review-ui` 22/22. (2) Backend `eslint.config.mjs`;
+`npm run lint` now runs in CI — 0 errors, 54 `any` warnings. (3) Frontend Vitest 2.1.9 + 21 tests
+(`gameResult`, `sound`), `npm test` in CI.
+
 `feature/backend-tests` — cut from `dev` on 2026-10-09. Backend Jest went from 2 suites / 20 tests
 to 7 / 91: `game.gateway.spec.ts`, `games.service.spec.ts`, `matchmaking.service.spec.ts`,
 `auth.service.spec.ts`, `common/utils/elo.spec.ts`. All pure units with in-memory Redis/Prisma
@@ -14,8 +27,8 @@ fakes, so CI is unchanged. Run: `cd backend && npm test`.
 `fix/ci-eslint-peer` — cut from `dev` on 2026-09-26. **CI had failed on every push since it
 was added:** backend `npm ci` hit ERESOLVE — `eslint@9` installed, `@typescript-eslint@7.18`
 wants `eslint@^8`. Bumped `@typescript-eslint/*` to v8 (supports ESLint 9); clean `npm ci` +
-20/20 Jest + `nest build` pass locally. Note: the backend has **no ESLint config**, so
-`npm run lint` still does nothing useful — add `eslint.config.mjs` or drop the deps.
+20/20 Jest + `nest build` pass locally.
+`npm run lint` did nothing useful until `eslint.config.mjs` landed on `chore/lint-and-frontend-tests`.
 
 `feature/sound` — cut from `dev` on 2026-09-26. Game sounds + a Settings page.
 
