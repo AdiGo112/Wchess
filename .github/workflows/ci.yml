@@ -19,7 +19,7 @@ jobs:
         working-directory: backend
     env:
       # Schema parsing resolves env("DATABASE_URL"); nothing connects. No DB service
-      # here because both suites are pure units — add postgres/redis when an e2e needs one.
+      # here because every suite is a pure unit (in-memory fakes) — add postgres/redis when an e2e needs one.
       DATABASE_URL: postgresql://chess:chess123@localhost:5432/chessweb
     steps:
       - uses: actions/checkout@v4
