@@ -12,10 +12,13 @@ import { GamesModule } from './games/games.module';
 import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { loggerModule } from './common/logging';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    loggerModule,
 
     // Serve the built frontend (frontend/dist) from this same server, so the
     // whole app is ONE origin on ONE port — production-style, and a zero-deploy
@@ -25,7 +28,8 @@ import { AnalysisModule } from './analysis/analysis.module';
     // dist (harmless if absent).
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist'),
-      exclude: ['/api/(.*)', '/socket.io/(.*)'],
+      // Express 5 / path-to-regexp v8 syntax (NestJS 11): named wildcards, no regex groups.
+      exclude: ['/api/{*path}', '/socket.io/{*path}'],
     }),
 
     ThrottlerModule.forRoot([
@@ -43,6 +47,7 @@ import { AnalysisModule } from './analysis/analysis.module';
     LeaderboardModule,
     AnalysisModule,
   ],
+  controllers: [HealthController],
   providers: [
     // Actually enforce the ThrottlerModule config above on every HTTP route.
     // (Global guards don't bind to WS gateways, so sockets are unaffected.)

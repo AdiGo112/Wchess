@@ -80,15 +80,20 @@ must own every clock, decide flag-fall, and survive a restart mid-game. A naive
 - One Redis sorted set `clock:deadlines` maps `roomId → epoch-ms deadline`, where
   `deadline = lastMoveAt + timers[sideToMove] + 500ms grace` (`setDeadline()`). Every move
   re-arms it; game end clears it.
-- A **single** 1-second `setInterval` sweep (`sweep()`) scans all watched rooms:
-  - `remaining = timers[side] − (now − lastMoveAt)`.
+- A **single** wake-up timer, set for the **earliest** deadline (ADR-0034). Each
+  `setDeadline` returns its deadline and `scheduleSweep()` pulls the timer forward if it's
+  sooner. When it fires, `sweep()` reads only the **expired** rooms
+  (`ZRANGEBYSCORE -inf now`):
   - If `remaining ≤ −500ms` (grace absorbs network jitter) → **flag-fall**: atomically claim
     the room to `ended` and finish it as a `TIMEOUT` for the side to move.
-  - Otherwise push a `clock_sync` event so clients correct their local interpolation.
-- Deadlines live in Redis, so the sweeper is stateless and restart-safe.
+  - Then `armSweep()` reads the next-earliest deadline and sleeps until it. No games, no timer:
+    zero Redis commands while idle (was 60/min).
+- Clients get clocks with each move and in join snapshots (`liveTimers`), and count down
+  by wall-clock time from the last reading. There is no per-second `clock_sync`.
+- Deadlines live in Redis, so boot re-arms from them and a restart still flags on time.
 
 **Where.** `game.gateway.ts · sweep()`; deadline helpers in `games.service.ts`
-(`setDeadline`, `clearDeadline`, `expiredDeadlines`, `watchedRooms`). Grace = `CLOCK_GRACE_MS = 500`.
+(`setDeadline`, `clearDeadline`, `expiredRooms`, `nextDeadline`, `watchedRooms`). Grace = `CLOCK_GRACE_MS = 500`.
 
 ---
 

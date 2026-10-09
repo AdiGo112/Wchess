@@ -14,6 +14,34 @@
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`chore/nest-11` — cut from `dev` on 2026-10-10. Ship-plan 0.1 finished: NestJS 10 → 11 (Express 5) clears every
+high audit finding; both CI audit gates now at `high`. **Express 5 gotchas hit (all fixed):**
+- route wildcards need names: `ServeStaticModule` exclude `/api/(.*)` → `/api/{*path}` (the old form 500'd every
+  SPA/unknown route); nestjs-pino `forRoutes` set to `{*path}` to silence the legacy-route warning;
+- `@nestjs/serve-static` 5 rewrites **any** error on an excluded `/api` route into "Cannot POST …" 404, which hid
+  body-parser 413/400s; now answered by an error handler right after the parser (`http-security.ts`), app created
+  with `bodyParser: false` so that parser is the only one;
+- `@nestjs/jwt` 11 types `expiresIn` as an ms-style duration; `JWT_EXPIRES_IN` is cast.
+Checks: 107 Jest, lint 0 errors, all 9 verify scripts green (security 11/11 incl. a new malformed-JSON check),
+bench counts unchanged (latency single-run noise, see performance-plan Phase 0 note).
+
+`chore/security-hardening` — cut from `feature/lean-realtime` (not `dev`: both touch the gateway) on
+2026-10-09. Ship plan Phase 0. Done: **0.1 partial** (`npm audit fix`: backend 0 critical / 6 high left,
+all needing a NestJS major; frontend 0 high) and **0.13 logging** (Pino + `nestjs-pino` 4.6.1, request
+ids, 14 product/security events, secrets redacted, the challenge token no longer logged; see
+`infrastructure/logging.md`). **0.2–0.12 done 2026-10-10** (helmet + CSP, Swagger dev-only, auth throttle,
+opt-in `TRUST_PROXY`, socket guard, 16 KB limits, strict DTOs, `/health`, secrets scan). New
+`frontend/scripts/verify-security.mjs` 10/10 (run with the default auth limit). All verify scripts green
+(`AUTH_RATE_LIMIT=1000` for the multi-user ones). Next: the NestJS major (rest of 0.1).
+
+`feature/lean-realtime` — cut from `dev` on 2026-10-09. ADR-0034: the clock sweeper sleeps until the
+earliest deadline instead of polling every second, and the per-second `clock_sync` is gone (clients
+count down by wall-clock time; join snapshots carry the live clock). Measured with the new
+`frontend/scripts/bench-live.mjs`: idle Redis 60 → 0/min, per waiting game 72 → 4 commands and
+120 → 0 socket messages per minute, flag-fall exact. Backend 96 Jest, `verify-clocks` 11/11 (B/B2/B3
+rewritten for the new contract). **Gotcha hit again:** `start:dev` on Windows left the old process on
+:3100 after a reload, so verify ran stale code. Run `node dist/main` (or kill :3100) before verifying.
+
 `chore/lint-and-frontend-tests` — cut from `dev` on 2026-10-09. (1) Ran the two Playwright scripts
 for the first time: `verify-pages` 16/16, `verify-review-ui` 22/22. (2) Backend `eslint.config.mjs`;
 `npm run lint` now runs in CI — 0 errors, 54 `any` warnings. (3) Frontend Vitest 2.1.9 + 21 tests

@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
@@ -23,6 +24,8 @@ function refreshTokenExpiry(): Date {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -62,6 +65,7 @@ export class AuthService {
           },
         },
       });
+      this.logger.log({ event: 'user_registered', userId: user.id });
       return { user: this.toProfile(user) };
     } catch (e: any) {
       if (e?.code === 'P2002') {
@@ -77,10 +81,13 @@ export class AuthService {
 
   async validateUser(username: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { username } });
-    if (!user || !user.passwordHash) return null;
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return null;
-    if (user.isBanned) return null;
+    const valid = !!user?.passwordHash && (await bcrypt.compare(password, user.passwordHash));
+    if (!user || !valid || user.isBanned) {
+      // Security event: brute force shows up as a burst of these for one username or IP.
+      const reason = !user ? 'unknown_user' : !valid ? 'bad_password' : 'banned';
+      this.logger.warn({ event: 'login_failed', username, reason });
+      return null;
+    }
     return user;
   }
 
@@ -112,12 +119,23 @@ export class AuthService {
       .deleteMany({ where: { userId: user.id, expiresAt: { lt: new Date() } } })
       .catch(() => undefined);
 
+    this.logger.log({ event: 'login', userId: user.id });
     return { accessToken, refreshToken: rawRefreshToken, user: this.toProfile(user) };
   }
 
   async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string }> {
     const tokenHash = crypto.createHash('sha256').update(dto.refreshToken).digest('hex');
 
+    return this.rotate(tokenHash).catch((err) => {
+      // A refused refresh is a stolen/replayed token or a clock-skewed client; never log the token.
+      if (err instanceof UnauthorizedException) {
+        this.logger.warn({ event: 'refresh_refused', reason: (err.getResponse() as { message?: string }).message });
+      }
+      throw err;
+    });
+  }
+
+  private rotate(tokenHash: string): Promise<{ accessToken: string; refreshToken: string }> {
     return this.prisma.$transaction(async (tx) => {
       const storedToken = await tx.refreshToken.findUnique({ where: { token: tokenHash } });
 

@@ -1,0 +1,21 @@
+{
+  "label": "nest11-info",
+  "at": "2026-10-09T19:22:59.258Z",
+  "idle": {
+    "redisCommandsPerMin": 14
+  },
+  "waiting": {
+    "games": 5,
+    "redisCommandsPerGamePerMin": 3,
+    "socketMessagesPerGamePerMin": 0
+  },
+  "moves": {
+    "plies": 20,
+    "redisCommandsPerMove": 5,
+    "socketMessagesPerMove": 2,
+    "latencyMs": {
+      "p50": 3,
+      "p99": 12.1
+    }
+  }
+}

@@ -71,7 +71,10 @@ VITE_SERVER_URL=http://localhost:3100
 | `JWT_EXPIRES_IN` | No (default `15m`) | Access token TTL. |
 | `REFRESH_TOKEN_EXPIRES_DAYS` | No (default `30`) | Refresh token lifetime in days. |
 | `PORT` | No (default `3100`) | API server port. |
-| `NODE_ENV` | No | `development` or `production`. |
+| `NODE_ENV` | No | `development` or `production`. `production` switches logs to JSON lines (see `logging.md`). |
+| `AUTH_RATE_LIMIT` | No (default `10`) | Requests per minute per IP to register/login/refresh/logout. Raise it locally when running verify scripts that log in many users (`AUTH_RATE_LIMIT=1000 node dist/main`). |
+| `TRUST_PROXY` | No (default off) | Number of proxy hops in front of the app. **Set `1` on any host with a load balancer**, or every user shares the proxy's IP for rate limiting. Leave unset with no proxy, or clients can spoof their IP. |
+| `LOG_LEVEL` | No (default `debug` in dev, `info` in prod) | Pino level: `debug` adds one line per move. |
 | `CORS_ORIGIN` | No (default `http://localhost:5173`) | Allowed browser origin(s). `*` = reflect any origin (demo/tunnel only); comma-separated = allow-list. Parsed by `common/utils/cors.ts`, applied to REST in `main.ts` and to both socket gateways. |
 | `FRONTEND_URL` | No | Origin used to build friend-challenge share links. Falls back to `CORS_ORIGIN`, then `http://localhost:5173`. |
 | `VITE_SERVER_URL` | No (frontend) | Absolute backend origin. **Unset = same-origin**: the frontend calls `/api/v1` and `/socket.io` on its own origin, which the Vite dev proxy (or a prod reverse proxy) forwards. Set it only to bypass the proxy. |
