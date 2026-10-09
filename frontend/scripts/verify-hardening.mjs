@@ -12,6 +12,7 @@
 //
 // Run against a live stack: docker compose up -d, backend on :3100.
 import { io } from "socket.io-client";
+import { execSync } from "child_process";
 
 const API = "http://localhost:3100/api/v1";
 const WS = "http://localhost:3100";
@@ -195,6 +196,11 @@ await sleep(500); // let saveCompletedGame + pipelined ZADDs settle
 
 // ── D1: pipelined leaderboard writes still land on all three boards ─────────
 {
+  // Bypass the 60s read cache (same as verify-leaderboard): a board read in the
+  // last minute — a previous run, an open Leaderboard tab — would hide the writes.
+  try {
+    execSync(`docker exec chessweb_redis sh -c "redis-cli --scan --pattern 'cache:leaderboard:*' | xargs -r redis-cli del"`, { stdio: "ignore" });
+  } catch { /* ignore */ }
   for (const period of ["all", "week", "month"]) {
     const board = await fetch(`${API}/leaderboard?variant=blitz&period=${period}&limit=100`).then((r) => r.json());
     const rows = Array.isArray(board) ? board : (board.players ?? board.entries ?? []);
