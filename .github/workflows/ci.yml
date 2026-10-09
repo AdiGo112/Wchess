@@ -29,6 +29,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=critical   # → high once NestJS 11 lands (ship-plan 0.1/0.2)
       - run: npx prisma generate
       - run: npm run lint           # errors block; `any` is a warning (eslint.config.mjs)
       - run: npm test
@@ -48,6 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm test               # vitest: pure helpers (gameResult, sound)
       - run: npm run build          # prebuild copies the engine, then tsc --noEmit && vite build
 

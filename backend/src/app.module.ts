@@ -13,6 +13,7 @@ import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { loggerModule } from './common/logging';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { loggerModule } from './common/logging';
     LeaderboardModule,
     AnalysisModule,
   ],
+  controllers: [HealthController],
   providers: [
     // Actually enforce the ThrottlerModule config above on every HTTP route.
     // (Global guards don't bind to WS gateways, so sockets are unaffected.)

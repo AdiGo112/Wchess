@@ -14,6 +14,7 @@ import { JwtService } from '@nestjs/jwt';
 import { GamesService, ActiveRoom, CLOCK_GRACE_MS } from './games.service';
 import { RedisService } from '../common/redis/redis.service';
 import { parseCorsOrigin } from '../common/utils/cors';
+import { SOCKET_EVENTS_PER_SEC, createRateLimiter, payloadProblem } from '../common/socket-guard';
 
 /** How many times a handler re-runs itself after losing a CAS race. */
 const CAS_RETRIES = 3;
@@ -25,6 +26,8 @@ const MIN_SLEEP_MS = 250;
 @WebSocketGateway({
   cors: { origin: parseCorsOrigin(), credentials: true },
   namespace: '/',
+  // Every client message is a few hundred bytes; the 1 MB default only helps a flood (ship-plan 0.9).
+  maxHttpBufferSize: 16_384,
 })
 export class GameGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
@@ -157,6 +160,7 @@ export class GameGateway
 
       client.data.userId = payload.sub;
       client.data.username = payload.username;
+      this.guardSocket(client);
 
       await this.redis.set(`socket:${client.id}`, payload.sub, 3600);
       // No TTL: this mapping must outlive any session length (it's used to
@@ -168,6 +172,32 @@ export class GameGateway
       this.logger.warn({ event: 'socket_auth_failed', ip: client.handshake.address });
       client.disconnect();
     }
+  }
+
+  /**
+   * Runs before every handler on this socket, both gateways included (ship-plan
+   * 0.7, 0.8): flooders are disconnected, malformed payloads are dropped and logged.
+   * Registered synchronously after auth, before any await, so no packet slips past.
+   */
+  private guardSocket(client: Socket) {
+    const allow = createRateLimiter(SOCKET_EVENTS_PER_SEC, 1000);
+    let cutOff = false;
+    client.use(([event, data], next) => {
+      const userId = client.data.userId;
+      if (cutOff) return; // packets still in flight after the disconnect: drop quietly
+      if (!allow()) {
+        cutOff = true; // one log line per flood, not one per extra packet
+        this.logger.warn({ event: 'socket_rate_limited', userId, socketEvent: event });
+        client.disconnect(true);
+        return;
+      }
+      const problem = payloadProblem(event, data);
+      if (problem) {
+        this.logger.warn({ event: 'socket_payload_rejected', userId, socketEvent: event, problem });
+        return; // dropped: no handler runs
+      }
+      next();
+    });
   }
 
   async handleDisconnect(client: Socket) {
