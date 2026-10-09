@@ -33,7 +33,8 @@ docs/
     ├── docker-setup.md    — the local dev stack
     ├── environment.md     — every env var
     ├── deployment.md      — the target production topology (not built yet)
-    └── ship-plan.md       — security hardening → free-tier launch, phased
+    ├── ship-plan.md       — security hardening → free-tier launch, phased
+    └── logging.md         — Pino setup, the event catalogue, what is never logged
 ```
 
 Also live, at the repo root: **`../Diagrams.md`** — 16 Mermaid diagrams (C4
