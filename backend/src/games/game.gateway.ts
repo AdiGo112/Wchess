@@ -163,8 +163,9 @@ export class GameGateway
       // deliver e.g. challenge_accepted) and is explicitly deleted on disconnect.
       await this.redis.set(`user:socket:${payload.sub}`, client.id);
 
-      this.logger.log(`Client connected: ${payload.username} (${client.id})`);
+      this.logger.log({ event: 'socket_connected', userId: payload.sub, username: payload.username });
     } catch {
+      this.logger.warn({ event: 'socket_auth_failed', ip: client.handshake.address });
       client.disconnect();
     }
   }
@@ -207,7 +208,7 @@ export class GameGateway
       }
     }
 
-    this.logger.log(`Client disconnected: ${userId}`);
+    this.logger.log({ event: 'socket_disconnected', userId });
   }
 
   @SubscribeMessage('join_room')
@@ -290,6 +291,11 @@ export class GameGateway
       }
       // The game is live: white's clock is now running (ADR-0004).
       this.scheduleSweep(await this.gamesService.setDeadline(room));
+      this.logger.log({
+        event: 'game_started', roomId: room.id, white: room.whitePlayer.username,
+        black: room.blackPlayer?.username, timeControl: `${room.timeControl}+${room.increment}`,
+        vsComputer: room.blackPlayer?.id === 'computer',
+      });
     }
 
     this.server.to(data.roomId).emit('game_start', {
@@ -312,7 +318,7 @@ export class GameGateway
   ) {
     const room = await this.gamesService.getRoom(data.roomId);
     if (!room || room.status !== 'active') {
-      return client.emit('invalid_move', { roomId: data.roomId, reason: 'Game not active' });
+      return this.rejectMove(client, data.roomId, 'Game not active');
     }
 
     const userId = client.data.userId;
@@ -320,13 +326,13 @@ export class GameGateway
     const isBlack = room.blackPlayer?.id === userId;
 
     if (!isWhite && !isBlack) {
-      return client.emit('invalid_move', { roomId: data.roomId, reason: 'Not a player' });
+      return this.rejectMove(client, data.roomId, 'Not a player');
     }
 
     const chess = new Chess(room.fen);
     const turn = chess.turn();
     if ((turn === 'w' && !isWhite) || (turn === 'b' && !isBlack)) {
-      return client.emit('invalid_move', { roomId: data.roomId, reason: 'Not your turn' });
+      return this.rejectMove(client, data.roomId, 'Not your turn');
     }
 
     // Clock (ADR-0004): judge flag-fall on the raw remaining time BEFORE any
@@ -354,12 +360,13 @@ export class GameGateway
       });
 
       if (!moveResult) {
-        return client.emit('invalid_move', { roomId: data.roomId, reason: 'Illegal move' });
+        return this.rejectMove(client, data.roomId, 'Illegal move');
       }
 
       room.timers[color] = Math.max(0, raw) + room.increment * 1000;
       room.fen = chess.fen();
       room.moves.push(moveResult.san);
+      this.logger.debug({ event: 'move', roomId: room.id, ply: room.moves.length, san: moveResult.san, thinkMs: now - room.lastMoveAt });
       room.lastMoveAt = now;
       room.drawOfferedBy = null;
 
@@ -377,7 +384,7 @@ export class GameGateway
       if (!(await this.gamesService.casSaveRoom(room))) {
         // Lost a race (draw offer, disconnect-ender, …) — redo from fresh state.
         if (attempt < CAS_RETRIES) return this.handleMove(client, data, attempt + 1);
-        return client.emit('invalid_move', { roomId: data.roomId, reason: 'Conflict, retry' });
+        return this.rejectMove(client, data.roomId, 'Conflict, retry');
       }
 
       this.server.to(data.roomId).emit('move_made', {
@@ -401,7 +408,7 @@ export class GameGateway
       // Re-arm the deadline for the side now to move.
       this.scheduleSweep(await this.gamesService.setDeadline(room));
     } catch {
-      client.emit('invalid_move', { roomId: data.roomId, reason: 'Invalid move format' });
+      this.rejectMove(client, data.roomId, 'Invalid move format');
     }
   }
 
@@ -592,6 +599,12 @@ export class GameGateway
     this.scheduleSweep(await this.gamesService.setDeadline(room));
   }
 
+  /** Refuse a move: tell the sender, and leave a trace (cheating or a client bug). */
+  private rejectMove(client: Socket, roomId: string, reason: string) {
+    this.logger.warn({ event: 'move_rejected', roomId, userId: client.data.userId, reason });
+    return client.emit('invalid_move', { roomId, reason });
+  }
+
   /**
    * Persist and announce a game the caller has ALREADY written as 'ended'
    * (via claimEnd or a terminal-move CAS). This method never writes the room —
@@ -608,6 +621,10 @@ export class GameGateway
     if (room.blackPlayer && room.blackPlayer.id !== 'computer') {
       ratingChanges = await this.gamesService.saveCompletedGame({ room, result, reason });
     }
+    this.logger.log({
+      event: 'game_over', roomId: room.id, result, reason, plies: room.moves.length,
+      durationMs: Date.now() - room.startedAt, rated: !!ratingChanges,
+    });
 
     this.server.to(room.id).emit('game_over', {
       roomId: room.id,

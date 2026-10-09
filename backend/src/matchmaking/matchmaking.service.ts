@@ -98,7 +98,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     await this.leaveAllQueues(entry.userId);
     await this.redis.lpush(key, JSON.stringify(entry));
     this.activeKeys.add(key);
-    this.logger.log(`${entry.username} (${entry.rating}) joined ${key}`);
+    this.logger.log({ event: 'queue_joined', userId: entry.userId, rating: entry.rating, queue: key });
   }
 
   async dequeue(
@@ -247,9 +247,12 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger.log(
-      `Match: ${white.username} (W) vs ${black.username} (B) → room ${room.id}`,
-    );
+    this.logger.log({
+      event: 'match_found', roomId: room.id, queue: key,
+      ratingGap: Math.abs(a.entry.rating - b.entry.rating),
+      // How long the longer-waiting player sat in the queue: the matchmaking SLO.
+      waitMs: Date.now() - Math.min(a.entry.enqueuedAt, b.entry.enqueuedAt),
+    });
 
     this.emitMatchFound(white.socketId, room.id, 'white', black);
     this.emitMatchFound(black.socketId, room.id, 'black', white);
@@ -445,10 +448,8 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       timeControl: challenge.timeControl,
     });
 
-    this.logger.log(
-      `Challenge ${token} accepted → room ${room.id} ` +
-        `(creator=${creatorColor}, accepter=${accepterColor})`,
-    );
+    // Never the token: it is the share link's secret.
+    this.logger.log({ event: 'challenge_accepted', roomId: room.id, creatorColor, accepterColor });
 
     return {
       gameId: room.id,
@@ -465,9 +466,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       dto.timeControl,
       dto.increment ?? 0,
     );
-    this.logger.log(
-      `Computer game ${room.id} for ${player.username} (difficulty ${dto.difficulty})`,
-    );
+    this.logger.log({ event: 'computer_game_created', roomId: room.id, userId, difficulty: dto.difficulty });
     return { gameId: room.id };
   }
 
