@@ -24,12 +24,15 @@ docs/
 │   ├── api-reference.md   — every REST endpoint
 │   ├── websocket-events.md— every Socket.io event, both directions
 │   ├── database-schema.md — Prisma models + Redis keys
-│   └── ADR-0032-*.md      — monolith now, socket split later
+│   ├── ADR-0032-*.md      — monolith now, socket split later
+│   ├── ADR-0033-*.md      — position-keyed eval cache, tiered analysis, compact storage (proposed)
+│   └── performance-plan.md— the low-cost benchmark, phased
 └── infrastructure/
     ├── ci-cd.md           — the pipeline and the branch workflow
     ├── docker-setup.md    — the local dev stack
     ├── environment.md     — every env var
-    └── deployment.md      — the target production topology (not built yet)
+    ├── deployment.md      — the target production topology (not built yet)
+    └── ship-plan.md       — security hardening → free-tier launch, phased
 ```
 
 Also live, at the repo root: **`../Diagrams.md`** — 16 Mermaid diagrams (C4
