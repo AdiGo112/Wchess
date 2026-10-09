@@ -29,6 +29,12 @@ Targets are guesses until Phase 0 measures them. They get rewritten then, not de
 
 ## Phase 0 — Benchmark harness (`feature/bench-harness`)
 
+> **Methodology note (2026-10-10).** `bench-live.mjs` counts (Redis commands, socket messages) are exact and
+> repeatable. Its latency figure is a single 20-ply run on a dev laptop and is **noise-dominated**: the same
+> code measured p50 1.8 ms / p99 5.2 ms on 2026-10-09 and 3.0–3.6 / 10.4–12.1 ms after the NestJS 11 upgrade,
+> with the socket path untouched and debug logging ruled out. Before latency is published: N ≥ 5 runs,
+> ≥ 200 plies each, report median and spread, on a quiet machine.
+
 Nothing else starts until this exists.
 
 - **Corpus:** a fixed sample of public Lichess games (e.g. 1,000 for quick runs, 10,000 for

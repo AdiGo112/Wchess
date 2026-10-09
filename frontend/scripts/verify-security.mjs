@@ -1,7 +1,8 @@
 // Runtime verification for ship-plan Phase 0 (security hardening):
 //   H  /health reports Postgres + Redis
 //   S  security headers on API responses (helmet)
-//   V  unknown body fields are rejected (forbidNonWhitelisted), oversized bodies get 413
+//   V  unknown body fields are rejected (forbidNonWhitelisted), oversized bodies get 413,
+//      malformed JSON gets 400
 //   R  login is rate-limited per IP (AUTH_RATE_LIMIT, default 10/min)
 //   P  malformed socket payloads are dropped without reaching a handler
 //   F  a socket flooding events is disconnected
@@ -38,6 +39,9 @@ const post = (path, body, headers = {}) =>
   check("V: unknown field is a 400", res.status === 400 && JSON.stringify(body).includes("role should not exist"), `${res.status}`);
   const big = await post("/auth/login", { username: "a".repeat(20_000), password: "x" });
   check("V: a 20 KB body is a 413", big.status === 413, `${big.status}`);
+  // Both used to come back as a misleading 404 on NestJS 11 (serve-static rewrote parser errors).
+  const broken = await post("/auth/login", '{"username": broken');
+  check("V: malformed JSON is a 400", broken.status === 400, `${broken.status}`);
 }
 
 // ---------- P + F (one real user, logged in once) ----------

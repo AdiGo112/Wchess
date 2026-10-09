@@ -9,7 +9,8 @@ import { applyHttpSecurity } from './common/http-security';
 
 async function bootstrap() {
   // Buffer boot logs until pino is wired, so even startup lines come out as JSON.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  // bodyParser: false: the only parser is the 16 KB JSON one in applyHttpSecurity.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, bodyParser: false });
   const logger = app.get(Logger);
   app.useLogger(logger);
   applyHttpSecurity(app);

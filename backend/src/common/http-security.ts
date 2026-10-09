@@ -42,5 +42,14 @@ export function applyHttpSecurity(app: NestExpressApplication) {
   if (hops > 0) app.set('trust proxy', hops);
 
   // Every request body here is a few hundred bytes (moves, logins, challenge settings).
+  // The only parser: main.ts creates the app with `bodyParser: false`.
   app.useBodyParser('json', { limit: '16kb' });
+
+  // Answer parser errors (413 too large, 400 malformed JSON) right here. Left to
+  // propagate, @nestjs/serve-static 5's error handler turns any error on an
+  // excluded /api route into a misleading "Cannot POST …" 404.
+  app.use((err: { status?: number; type?: string; expose?: boolean; message?: string }, req: Request, res: Response, next: NextFunction) => {
+    if (!err?.expose || !err.status || !err.type) return next(err); // not a body-parser error
+    res.status(err.status).json({ statusCode: err.status, message: err.message, error: err.type });
+  });
 }
