@@ -21,7 +21,7 @@ cd backend && npx prisma migrate dev        # run migrations
 There is no seed script — `backend/package.json` has no `prisma.seed` entry and
 no `prisma/seed.ts` exists. Register users through the app or a verify script.
 
-**Latest (2026-10-09):** lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
+**Latest (2026-10-09):** ADR-0034 event-driven clock sweeper on `feature/lean-realtime` — benchmark with `cd frontend && node scripts/bench-live.mjs <label>` (needs zero live games). Before that: lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
 
 **Earlier (2026-09-25):** spectate shipped on `feature/spectate` — Lobby → *Watch live*. Verify with
 `node frontend/scripts/verify-spectate.mjs` against a running backend (9 checks).

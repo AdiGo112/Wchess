@@ -26,6 +26,7 @@ docs/
 │   ├── database-schema.md — Prisma models + Redis keys
 │   ├── ADR-0032-*.md      — monolith now, socket split later
 │   ├── ADR-0033-*.md      — position-keyed eval cache, tiered analysis, compact storage (proposed)
+│   ├── ADR-0034-*.md      — event-driven clock sweeper, no per-second clock_sync
 │   └── performance-plan.md— the low-cost benchmark, phased
 └── infrastructure/
     ├── ci-cd.md           — the pipeline and the branch workflow

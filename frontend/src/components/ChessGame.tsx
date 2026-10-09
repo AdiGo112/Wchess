@@ -9,7 +9,6 @@ import useStockfish from "../hooks/useStockfish";
 import useBoardFit from "../hooks/useBoardFit";
 import { playMoveSound, playSound } from "../lib/sound";
 import type {
-  ClockSyncPayload,
   Color,
   GameOverPayload,
   GameStartPayload,
@@ -119,12 +118,25 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
   }, []);
 
+  // The server sends clocks only with moves and join snapshots (ADR-0034), so
+  // the display counts down from the last server reading by wall-clock time.
+  // Subtracting a fixed 1000 per tick drifted whenever the browser throttled the
+  // interval (background tabs), which a per-second clock_sync used to paper over.
+  const serverClockRef = useRef<{ timers: Timers; at: number } | null>(null);
+  const applyServerTimers = useCallback((t: Timers) => {
+    serverClockRef.current = { timers: t, at: Date.now() };
+    setTimers(t);
+  }, []);
+
   const startClock = useCallback(() => {
     stopClock();
     clockRef.current = setInterval(() => {
-      setTimers((prev) => {
-        const activeColor = turnRef.current === "w" ? "white" : "black";
-        return { ...prev, [activeColor]: Math.max(0, prev[activeColor] - 1000) };
+      const base = serverClockRef.current;
+      if (!base) return;
+      const activeColor = turnRef.current === "w" ? "white" : "black";
+      setTimers({
+        ...base.timers,
+        [activeColor]: Math.max(0, base.timers[activeColor] - (Date.now() - base.at)),
       });
     }, 1000);
   }, [stopClock]);
@@ -136,7 +148,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
 
     // Socket.io reconnects transparently, but the server-side room membership
     // (client.join) is per-connection and is NOT restored — without this the
-    // board stops receiving move_made/clock_sync/game_over and silently
+    // board stops receiving move_made/game_over and silently
     // freezes after any network blip. Same pattern as useMatchmakingSocket.
     const onReconnect = () => socket.emit("join_room", { roomId });
     socket.on("connect", onReconnect);
@@ -147,7 +159,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       setGame(chess);
       setFen(data.fen || "start");
       setPlayers({ white: data.white, black: data.black });
-      setTimers(data.timers || { white: (timeControl || 300) * 1000, black: (timeControl || 300) * 1000 });
+      applyServerTimers(data.timers || { white: (timeControl || 300) * 1000, black: (timeControl || 300) * 1000 });
       setStatus("Game in progress");
       setDifficulty(data.black?.id === "computer" ? (data.difficulty ?? 3) : null);
       if (user && data.black?.id === user.id) setOrientation("black");
@@ -162,7 +174,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       turnRef.current = chess.turn();
       setGame(chess);
       setFen(data.fen);
-      setTimers(data.timers);
+      applyServerTimers(data.timers);
       setMoveHistory((prev) => [...prev, data.move.san]);
       setDrawOfferedBy(data.drawOfferedBy ?? null);
       setLastMove({ from: data.move.from, to: data.move.to });
@@ -199,7 +211,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       turnRef.current = chess.turn();
       setGame(chess);
       setFen(data.fen);
-      setTimers(data.timers);
+      applyServerTimers(data.timers);
       setMoveHistory(data.moves || []);
       setPlayers({ white: data.white, black: data.black });
       setDrawOfferedBy(data.drawOfferedBy ?? null);
@@ -228,10 +240,6 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       toast.error(data.reason || "Illegal move");
     });
 
-    // Server-authoritative clock correction every 1s (ADR-0004); the local
-    // interval only interpolates between these.
-    socket.on("clock_sync", (data: ClockSyncPayload) => setTimers(data.timers));
-
     socket.on("rematch_offered", (data: { byUserId: string }) => {
       setRematchOfferedBy(data.byUserId);
       if (roleRef.current !== "spectator" && data.byUserId !== user?.id) playSound("notify");
@@ -243,12 +251,12 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       [
         "game_start", "move_made", "game_over", "draw_offered", "draw_declined",
         "opponent_disconnected", "opponent_reconnected", "game_state", "invalid_move",
-        "clock_sync", "rematch_offered", "rematch_ready",
+        "rematch_offered", "rematch_ready",
       ].forEach((e) => socket.off(e));
       socket.off("connect", onReconnect);
       stopClock();
     };
-  }, [socket, roomId, user, navigate, startClock, stopClock, timeControl]);
+  }, [socket, roomId, user, navigate, startClock, stopClock, applyServerTimers, timeControl]);
 
   // vs-computer: think locally on black's turn, then relay the engine's move.
   // The server re-validates it (see GameGateway.handleComputerMove).
@@ -271,7 +279,7 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
 
   // Low time, chess.com-style: one warning as YOUR running clock crosses 10s,
   // then a tick each second from 5s. Timers update from both the local interval
-  // and clock_sync, so dedupe on the displayed second, not on every state change.
+  // and server readings, so dedupe on the displayed second, not on every state change.
   const lastTickRef = useRef<number | null>(null);
   useEffect(() => {
     const myColor = orientation === "white" ? "w" : "b";

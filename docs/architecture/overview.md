@@ -117,8 +117,8 @@ write is conditional on the room being unchanged since the read — a losing wri
 retries against fresh state instead of overwriting a legal move. Validation
 ladder: `Diagrams.md` §10.
 
-**2 · Clocks live in one Redis sorted set of deadlines, swept every second**
-(ADR-0004). A browser cannot be trusted to time itself, and a closed laptop must
+**2 · Clocks live in one Redis sorted set of deadlines, swept at the earliest deadline**
+(ADR-0004, ADR-0034: one timer, zero Redis traffic when idle). A browser cannot be trusted to time itself, and a closed laptop must
 still lose on time with nobody present to claim it. The sweeper is the only thing
 that flags a flag-fall; the client's countdown is cosmetic.
 
