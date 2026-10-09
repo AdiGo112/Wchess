@@ -1,0 +1,21 @@
+{
+  "label": "baseline",
+  "at": "2026-10-09T14:49:21.673Z",
+  "idle": {
+    "redisCommandsPerMin": 94
+  },
+  "waiting": {
+    "games": 5,
+    "redisCommandsPerGamePerMin": 72,
+    "socketMessagesPerGamePerMin": 120
+  },
+  "moves": {
+    "plies": 20,
+    "redisCommandsPerMove": 5.3,
+    "socketMessagesPerMove": 2.1,
+    "latencyMs": {
+      "p50": 2.7,
+      "p99": 5.3
+    }
+  }
+}
