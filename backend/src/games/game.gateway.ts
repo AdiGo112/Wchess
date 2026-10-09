@@ -17,7 +17,10 @@ import { parseCorsOrigin } from '../common/utils/cors';
 
 /** How many times a handler re-runs itself after losing a CAS race. */
 const CAS_RETRIES = 3;
-const SWEEP_INTERVAL_MS = 1000;
+/** Longest the sweeper sleeps, so a missed re-arm can't strand a game for hours. */
+const MAX_SLEEP_MS = 60_000;
+/** Shortest re-arm, so a deadline that can't be settled yet can't hot-loop. */
+const MIN_SLEEP_MS = 250;
 
 @WebSocketGateway({
   cors: { origin: parseCorsOrigin(), credentials: true },
@@ -30,6 +33,8 @@ export class GameGateway
   private readonly logger = new Logger(GameGateway.name);
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private sweepTimer: NodeJS.Timeout | null = null;
+  /** When the pending sweep fires; Infinity when none is scheduled. */
+  private sweepAt = Infinity;
 
   constructor(
     private gamesService: GamesService,
@@ -38,20 +43,53 @@ export class GameGateway
   ) {}
 
   onModuleInit() {
-    // ADR-0004 addendum: one sweeper over the clock:deadlines ZSET instead of
-    // one setInterval per game. Deadlines live in Redis, so they survive a
-    // restart — a game whose player vanished still flags on schedule.
-    this.sweepTimer = setInterval(() => {
-      this.sweep().catch((err) => this.logger.error('Clock sweep failed', err));
-    }, SWEEP_INTERVAL_MS);
+    // ADR-0004 addendum + ADR-0034: one sweeper over the clock:deadlines ZSET,
+    // woken for the earliest deadline instead of polling every second. Deadlines
+    // live in Redis, so a restart re-arms from them and a game whose player
+    // vanished still flags on schedule.
+    this.armSweep().catch((err) => this.logger.error('Clock sweep arm failed', err));
   }
 
   onModuleDestroy() {
-    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    if (this.sweepTimer) clearTimeout(this.sweepTimer);
+  }
+
+  /**
+   * Wake the sweeper at `at`, unless it is already due sooner. Every deadline
+   * write goes through this process (single instance, ADR-0032), so calling
+   * this after each `setDeadline` keeps the timer exact.
+   * ponytail: per-process timer; with instance #2, each instance must also re-arm
+   * from Redis periodically (or move flagging into a keyspace-notification consumer).
+   */
+  private scheduleSweep(at: number) {
+    if (at >= this.sweepAt) return;
+    if (this.sweepTimer) clearTimeout(this.sweepTimer);
+    this.sweepAt = at;
+    const delay = Math.min(Math.max(at - Date.now(), MIN_SLEEP_MS), MAX_SLEEP_MS);
+    this.sweepTimer = setTimeout(() => {
+      this.sweepTimer = null;
+      this.sweepAt = Infinity;
+      this.sweep()
+        .catch((err) => this.logger.error('Clock sweep failed', err))
+        .finally(() => this.armSweep().catch((err) => this.logger.error('Clock sweep arm failed', err)));
+    }, delay);
+  }
+
+  /** Schedule for the earliest stored deadline. No games: no timer, zero idle Redis traffic. */
+  private async armSweep() {
+    const next = await this.gamesService.nextDeadline();
+    if (next !== null) this.scheduleSweep(next);
   }
 
   private sideToMove(room: ActiveRoom): 'white' | 'black' {
     return room.fen.split(' ')[1] === 'w' ? 'white' : 'black';
+  }
+
+  /** Clocks as of now: the side to move has been thinking since lastMoveAt. */
+  private liveTimers(room: ActiveRoom) {
+    if (room.status !== 'active') return room.timers;
+    const side = this.sideToMove(room);
+    return { ...room.timers, [side]: Math.max(0, room.timers[side] - (Date.now() - room.lastMoveAt)) };
   }
 
   private isPlayer(room: ActiveRoom, userId: string): boolean {
@@ -59,41 +97,29 @@ export class GameGateway
   }
 
   /**
-   * One pass of the server-authoritative clock (ADR-0004): for every watched
-   * room, either end it on flag-fall (past deadline + grace) or push a
-   * clock_sync so clients can correct their local interpolation.
+   * One pass of the server-authoritative clock (ADR-0004): end every room whose
+   * deadline (grace included) has passed. Only expired rooms are read. Clients
+   * get clocks with each move and in the join snapshot (ADR-0034), not a
+   * per-second clock_sync.
    */
   private async sweep() {
-    const now = Date.now();
-    for (const roomId of await this.gamesService.watchedRooms()) {
+    for (const roomId of await this.gamesService.expiredRooms(Date.now())) {
       const room = await this.gamesService.getRoom(roomId);
       if (!room || room.status !== 'active') {
         await this.gamesService.clearDeadline(roomId);
         continue;
       }
-      const side = this.sideToMove(room);
-      const remaining = room.timers[side] - (now - room.lastMoveAt);
-
-      if (remaining <= -CLOCK_GRACE_MS) {
-        const ended = await this.claimEnd(roomId, (r) => {
-          const s = this.sideToMove(r);
-          const rem = r.timers[s] - (Date.now() - r.lastMoveAt);
-          if (rem > -CLOCK_GRACE_MS) return false; // a racing move re-armed the clock
-          r.timers[s] = 0;
-          return true;
-        });
-        if (ended) {
-          const flagged = this.sideToMove(ended);
-          await this.endGame(ended, flagged === 'white' ? 'BLACK' : 'WHITE', 'TIMEOUT');
-        }
-        continue;
-      }
-
-      this.server.to(roomId).emit('clock_sync', {
-        roomId,
-        timers: { ...room.timers, [side]: Math.max(0, remaining) },
-        serverTime: now,
+      const ended = await this.claimEnd(roomId, (r) => {
+        const s = this.sideToMove(r);
+        const rem = r.timers[s] - (Date.now() - r.lastMoveAt);
+        if (rem > -CLOCK_GRACE_MS) return false; // a racing move re-armed the clock
+        r.timers[s] = 0;
+        return true;
       });
+      if (ended) {
+        const flagged = this.sideToMove(ended);
+        await this.endGame(ended, flagged === 'white' ? 'BLACK' : 'WHITE', 'TIMEOUT');
+      }
     }
   }
 
@@ -215,7 +241,7 @@ export class GameGateway
         white: room.whitePlayer,
         black: room.blackPlayer,
         fen: room.fen,
-        timers: room.timers,
+        timers: this.liveTimers(room),
         moves: room.moves,
         drawOfferedBy: room.drawOfferedBy,
         difficulty: room.difficulty,
@@ -243,7 +269,7 @@ export class GameGateway
         white: room.whitePlayer,
         black: room.blackPlayer,
         fen: room.fen,
-        timers: room.timers,
+        timers: this.liveTimers(room),
         moves: room.moves,
         drawOfferedBy: room.drawOfferedBy,
         difficulty: room.difficulty,
@@ -263,7 +289,7 @@ export class GameGateway
         return;
       }
       // The game is live: white's clock is now running (ADR-0004).
-      await this.gamesService.setDeadline(room);
+      this.scheduleSweep(await this.gamesService.setDeadline(room));
     }
 
     this.server.to(data.roomId).emit('game_start', {
@@ -373,7 +399,7 @@ export class GameGateway
         return this.endGame(room, result, reason!);
       }
       // Re-arm the deadline for the side now to move.
-      await this.gamesService.setDeadline(room);
+      this.scheduleSweep(await this.gamesService.setDeadline(room));
     } catch {
       client.emit('invalid_move', { roomId: data.roomId, reason: 'Invalid move format' });
     }
@@ -563,7 +589,7 @@ export class GameGateway
     });
 
     if (result) return this.endGame(room, result, reason!);
-    await this.gamesService.setDeadline(room);
+    this.scheduleSweep(await this.gamesService.setDeadline(room));
   }
 
   /**
