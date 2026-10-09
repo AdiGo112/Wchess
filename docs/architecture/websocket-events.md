@@ -111,3 +111,15 @@ interface RoomPlayer {
   rating:   number;
 }
 ```
+
+---
+
+## Socket guard (ship-plan 0.7–0.9)
+
+Every incoming event on an authenticated socket passes `common/socket-guard.ts` first:
+
+- **Rate:** more than 20 events in a second → the socket is disconnected (`socket_rate_limited`).
+- **Shape:** the payload must be an object; `roomId` must be 6 chars of `[A-Z0-9]`; `move` / `computer_move`
+  need `from`/`to` matching `[a-h][1-8]` and an optional `promotion` in `qrbn`. Anything else is dropped
+  with no reply (`socket_payload_rejected`). A well-formed move that's illegal still gets `invalid_move`.
+- **Size:** frames over 16 KB are refused by Socket.io (`maxHttpBufferSize`).

@@ -33,6 +33,8 @@ aren't logged.
 | `refresh_refused` | **warn** | reason | replayed or stolen refresh token, expired session |
 | `socket_connected` / `socket_disconnected` | info | userId | concurrent players |
 | `socket_auth_failed` | **warn** | ip | bad or expired JWT on the socket |
+| `socket_payload_rejected` | **warn** | userId, socketEvent, problem | malformed socket message dropped before any handler |
+| `socket_rate_limited` | **warn** | userId, socketEvent | > 20 events/s; socket disconnected (logged once per flood) |
 | `queue_joined` | info | userId, rating, queue | demand per time control |
 | `match_found` | info | roomId, queue, ratingGap, waitMs | matchmaking quality: wait time vs rating fairness |
 | `challenge_accepted` | info | roomId, colors | friend games |

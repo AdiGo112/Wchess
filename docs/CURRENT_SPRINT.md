@@ -18,7 +18,10 @@
 2026-10-09. Ship plan Phase 0. Done: **0.1 partial** (`npm audit fix`: backend 0 critical / 6 high left,
 all needing a NestJS major; frontend 0 high) and **0.13 logging** (Pino + `nestjs-pino` 4.6.1, request
 ids, 14 product/security events, secrets redacted, the challenge token no longer logged; see
-`infrastructure/logging.md`). Next: 0.2–0.12, then the NestJS major.
+`infrastructure/logging.md`). **0.2–0.12 done 2026-10-10** (helmet + CSP, Swagger dev-only, auth throttle,
+opt-in `TRUST_PROXY`, socket guard, 16 KB limits, strict DTOs, `/health`, secrets scan). New
+`frontend/scripts/verify-security.mjs` 10/10 (run with the default auth limit). All verify scripts green
+(`AUTH_RATE_LIMIT=1000` for the multi-user ones). Next: the NestJS major (rest of 0.1).
 
 `feature/lean-realtime` — cut from `dev` on 2026-10-09. ADR-0034: the clock sweeper sleeps until the
 earliest deadline instead of polling every second, and the per-second `clock_sync` is gone (clients
