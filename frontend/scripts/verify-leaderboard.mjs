@@ -42,7 +42,7 @@ const aS = await conn(alice.accessToken);
 const bS = await conn(bob.accessToken);
 const ch = await fetch(`${API}/matchmaking/challenge`, {
   method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${alice.accessToken}` },
-  body: JSON.stringify({ variant: "blitz", timeControl: 300, creatorColor: "white" }),
+  body: JSON.stringify({ timeControl: 300, creatorColor: "white" }),
 }).then((r) => r.json());
 const acc = await fetch(`${API}/matchmaking/challenge/${ch.token}/accept`, { method: "POST", headers: { Authorization: `Bearer ${bob.accessToken}` } }).then((r) => r.json());
 const roomId = acc.gameId;

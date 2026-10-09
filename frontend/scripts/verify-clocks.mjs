@@ -45,7 +45,7 @@ async function createGame(a, b, timeControl) {
   const res = await fetch(`${API}/matchmaking/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.accessToken}` },
-    body: JSON.stringify({ variant: 'bullet', timeControl, creatorColor: 'white' }),
+    body: JSON.stringify({ timeControl, creatorColor: 'white' }),
   });
   const { token } = await res.json();
   const acc = await fetch(`${API}/matchmaking/challenge/${token}/accept`, {

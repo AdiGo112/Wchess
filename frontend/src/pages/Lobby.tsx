@@ -62,7 +62,6 @@ export default function Lobby() {
     setCreating(true);
     try {
       const { data } = await api.post<ChallengeCreatedResponse>("/matchmaking/challenge", {
-        variant: friendPreset.variant,
         timeControl: friendPreset.timeControl,
         increment: friendPreset.increment,
         creatorColor,
@@ -90,7 +89,6 @@ export default function Lobby() {
     try {
       const { data } = await api.post<{ gameId: string }>("/matchmaking/computer", {
         difficulty,
-        variant: computerPreset.variant,
         timeControl: computerPreset.timeControl,
         increment: computerPreset.increment,
       });
