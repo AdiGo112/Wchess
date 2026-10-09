@@ -1,15 +1,18 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { parseCorsOrigin } from './common/utils/cors';
+import { applyHttpSecurity } from './common/http-security';
 
 async function bootstrap() {
   // Buffer boot logs until pino is wired, so even startup lines come out as JSON.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   const logger = app.get(Logger);
   app.useLogger(logger);
+  applyHttpSecurity(app);
 
   app.setGlobalPrefix('api/v1');
 
@@ -28,21 +31,25 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: false,
+      // Unknown fields are a client bug or a probe: reject them rather than drop them silently.
+      forbidNonWhitelisted: true,
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('WChess API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // A public API map helps attackers more than users: dev only.
+  const docs = process.env.NODE_ENV !== 'production';
+  if (docs) {
+    const config = new DocumentBuilder()
+      .setTitle('WChess API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
+  }
 
   const port = process.env.PORT || 3100;
   await app.listen(port);
-  logger.log(`WChess backend running on http://localhost:${port} (API docs: /api/docs)`);
+  logger.log(`WChess backend running on http://localhost:${port}${docs ? ' (API docs: /api/docs)' : ''}`);
 }
 
 bootstrap();
