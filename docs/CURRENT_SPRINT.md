@@ -14,6 +14,12 @@
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`chore/security-hardening` — cut from `feature/lean-realtime` (not `dev`: both touch the gateway) on
+2026-10-09. Ship plan Phase 0. Done: **0.1 partial** (`npm audit fix`: backend 0 critical / 6 high left,
+all needing a NestJS major; frontend 0 high) and **0.13 logging** (Pino + `nestjs-pino` 4.6.1, request
+ids, 14 product/security events, secrets redacted, the challenge token no longer logged; see
+`infrastructure/logging.md`). Next: 0.2–0.12, then the NestJS major.
+
 `feature/lean-realtime` — cut from `dev` on 2026-10-09. ADR-0034: the clock sweeper sleeps until the
 earliest deadline instead of polling every second, and the per-second `clock_sync` is gone (clients
 count down by wall-clock time; join snapshots carry the live clock). Measured with the new

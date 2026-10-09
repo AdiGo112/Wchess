@@ -12,10 +12,12 @@ import { GamesModule } from './games/games.module';
 import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { loggerModule } from './common/logging';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    loggerModule,
 
     // Serve the built frontend (frontend/dist) from this same server, so the
     // whole app is ONE origin on ONE port — production-style, and a zero-deploy
