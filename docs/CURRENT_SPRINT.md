@@ -6,6 +6,11 @@
 ---
 
 ## Active Branch
+`feature/backend-tests` — cut from `dev` on 2026-10-09. Backend Jest went from 2 suites / 20 tests
+to 7 / 91: `game.gateway.spec.ts`, `games.service.spec.ts`, `matchmaking.service.spec.ts`,
+`auth.service.spec.ts`, `common/utils/elo.spec.ts`. All pure units with in-memory Redis/Prisma
+fakes, so CI is unchanged. Run: `cd backend && npm test`.
+
 `fix/ci-eslint-peer` — cut from `dev` on 2026-09-26. **CI had failed on every push since it
 was added:** backend `npm ci` hit ERESOLVE — `eslint@9` installed, `@typescript-eslint@7.18`
 wants `eslint@^8`. Bumped `@typescript-eslint/*` to v8 (supports ESLint 9); clean `npm ci` +
