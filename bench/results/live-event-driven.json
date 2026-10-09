@@ -1,0 +1,21 @@
+{
+  "label": "event-driven",
+  "at": "2026-10-09T15:00:50.362Z",
+  "idle": {
+    "redisCommandsPerMin": 14
+  },
+  "waiting": {
+    "games": 5,
+    "redisCommandsPerGamePerMin": 4,
+    "socketMessagesPerGamePerMin": 0
+  },
+  "moves": {
+    "plies": 20,
+    "redisCommandsPerMove": 5,
+    "socketMessagesPerMove": 2,
+    "latencyMs": {
+      "p50": 1.8,
+      "p99": 5.2
+    }
+  }
+}

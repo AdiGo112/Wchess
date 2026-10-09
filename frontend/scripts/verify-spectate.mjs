@@ -52,7 +52,7 @@ const v = await register(`spv_${suffix}`);
 const res = await fetch(`${API}/matchmaking/challenge`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${w.accessToken}` },
-  body: JSON.stringify({ variant: 'blitz', timeControl: 300, creatorColor: 'white' }),
+  body: JSON.stringify({ timeControl: 300, creatorColor: 'white' }),
 });
 const { token } = await res.json();
 const { gameId: roomId } = await (await fetch(`${API}/matchmaking/challenge/${token}/accept`, {

@@ -111,13 +111,6 @@ export interface GameOverPayload {
   ratingChange: { white: RatingChangeSide; black: RatingChangeSide } | null;
 }
 
-/** ADR-0004: authoritative clock correction, pushed every 1s by the sweeper. */
-export interface ClockSyncPayload {
-  roomId: string;
-  timers: Timers;
-  serverTime: number;
-}
-
 export interface MatchFoundPayload {
   roomId: string;
   color: Color;

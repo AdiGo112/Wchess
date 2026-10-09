@@ -240,8 +240,8 @@ KEY   clock:deadlines           TYPE: ZSET  score=epoch-ms member=roomId
 No `spectators` field: the spectate handler was cut by ADR-0032. `version` is
 read-modify-written through a Lua compare-and-set, so two concurrent moves
 cannot both win. `clock:deadlines` is the single sorted-set sweeper that ADR-0004
-runs instead of one `setInterval` per game - one timer for every live game, and
-deadlines that survive a restart.
+runs instead of one `setInterval` per game - one timer for every live game, woken for
+the earliest deadline (ADR-0034), and deadlines that survive a restart.
 
 ### Matchmaking Queues
 ```

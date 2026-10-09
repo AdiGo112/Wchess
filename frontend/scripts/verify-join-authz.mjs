@@ -35,7 +35,7 @@ async function game(a, b, tc = 600) {
   const res = await fetch(`${API}/matchmaking/challenge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${a.accessToken}` },
-    body: JSON.stringify({ variant: "rapid", timeControl: tc, creatorColor: "white" }),
+    body: JSON.stringify({ timeControl: tc, creatorColor: "white" }),
   });
   const { token } = await res.json();
   const acc = await fetch(`${API}/matchmaking/challenge/${token}/accept`, { method: "POST", headers: { Authorization: `Bearer ${b.accessToken}` } });

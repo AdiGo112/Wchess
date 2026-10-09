@@ -24,9 +24,16 @@ function fakeGames() {
       rooms.set(room.id, JSON.stringify(room));
       return true;
     }),
-    setDeadline: jest.fn(async (room: ActiveRoom) => { deadlines.set(room.id, 1); }),
+    setDeadline: jest.fn(async (room: ActiveRoom) => {
+      const side = room.fen.split(' ')[1] === 'w' ? 'white' : 'black';
+      const at = room.lastMoveAt + room.timers[side] + CLOCK_GRACE_MS;
+      deadlines.set(room.id, at);
+      return at;
+    }),
     clearDeadline: jest.fn(async (id: string) => { deadlines.delete(id); }),
     watchedRooms: jest.fn(async () => [...deadlines.keys()]),
+    expiredRooms: jest.fn(async (now: number) => [...deadlines].filter(([, at]) => at <= now).map(([id]) => id)),
+    nextDeadline: jest.fn(async () => (deadlines.size ? Math.min(...deadlines.values()) : null)),
     saveCompletedGame: jest.fn(async ({ result, reason }) => {
       saved.push({ result, reason });
       return { game: { id: 'g1' }, whiteRatingChange: 8, blackRatingChange: -8, newWhiteRating: 1208, newBlackRating: 1192 };
@@ -208,13 +215,69 @@ describe('GameGateway — clock sweeper', () => {
     expect(games.deadlines.has('R')).toBe(false);
   });
 
-  it('otherwise sends a clock_sync with the running side counted down', async () => {
-    const { gw, games, events } = setup(room({ lastMoveAt: Date.now() - 10_000 }));
-    games.deadlines.set('R', 0);
+  it('reads only expired rooms and never pushes a per-second clock_sync', async () => {
+    const { gw, games, events } = setup(room());
+    games.deadlines.set('R', Date.now() + 60_000);
     await (gw as any).sweep();
-    const sync = events('clock_sync')[0];
-    expect(sync.timers.white).toBeLessThanOrEqual(50_000);
-    expect(sync.timers.black).toBe(60_000);
+    expect(games.getRoom).not.toHaveBeenCalled();
+    expect(events('clock_sync')).toHaveLength(0);
+    expect(games.read('R').status).toBe('active');
+  });
+
+  it('with no games it schedules nothing (zero idle Redis traffic)', async () => {
+    jest.useFakeTimers();
+    try {
+      const { gw, games } = setup();
+      gw.onModuleInit();
+      await jest.advanceTimersByTimeAsync(10 * 60_000);
+      expect(games.nextDeadline).toHaveBeenCalledTimes(1); // the boot-time arm only
+      expect(games.expiredRooms).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('wakes exactly at the deadline a move sets, with no polling before it', async () => {
+    jest.useFakeTimers();
+    try {
+      const { gw, games, client, events } = setup(room({ timers: { white: 60_000, black: 3_000 } }));
+      await gw.handleMove(client('w'), { roomId: 'R', from: 'e2', to: 'e4' }); // black's 3s now runs
+      await jest.advanceTimersByTimeAsync(3_000 + CLOCK_GRACE_MS - 100);
+      expect(games.expiredRooms).not.toHaveBeenCalled();
+      expect(events('game_over')).toHaveLength(0);
+
+      await jest.advanceTimersByTimeAsync(200);
+      expect(events('game_over')[0]).toMatchObject({ result: 'white', reason: 'timeout' });
+      expect(games.expiredRooms).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a restart re-arms from deadlines already in Redis', async () => {
+    jest.useFakeTimers();
+    try {
+      const { gw, games, events } = setup(room({ timers: { white: 2_000, black: 60_000 }, lastMoveAt: Date.now() }));
+      games.deadlines.set('R', Date.now() + 2_000 + CLOCK_GRACE_MS);
+      gw.onModuleInit();
+      await jest.advanceTimersByTimeAsync(2_000 + CLOCK_GRACE_MS + 50);
+      expect(events('game_over')[0]).toMatchObject({ result: 'black', reason: 'timeout' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('an earlier deadline pulls a later scheduled wake-up forward', async () => {
+    jest.useFakeTimers();
+    try {
+      const { gw, games, events } = setup(room({ timers: { white: 1_000, black: 60_000 }, lastMoveAt: Date.now() }));
+      (gw as any).scheduleSweep(Date.now() + 30_000);
+      (gw as any).scheduleSweep(await games.setDeadline(games.read('R')));
+      await jest.advanceTimersByTimeAsync(1_000 + CLOCK_GRACE_MS + 50);
+      expect(events('game_over')).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('drops deadlines for rooms that are gone or no longer active', async () => {
@@ -227,6 +290,17 @@ describe('GameGateway — clock sweeper', () => {
 });
 
 describe('GameGateway — joining and spectating', () => {
+  it('a reconnect snapshot carries the live clock, not the last-move clock', async () => {
+    const { gw, client } = setup(room({ lastMoveAt: Date.now() - 10_000 }));
+    for (const who of ['w', 'x']) { // a returning player, then a spectator
+      const c = client(who);
+      await gw.handleJoinRoom(c, { roomId: 'R' });
+      const { timers } = c.own.find((e: any) => e.event === 'game_state').data;
+      expect(timers.white).toBeLessThanOrEqual(50_000); // white has been thinking 10s
+      expect(timers.black).toBe(60_000);
+    }
+  });
+
   it('the first player to join starts the game and white\'s clock', async () => {
     const { gw, games, client, events } = setup(room({ status: 'waiting' }));
     await gw.handleJoinRoom(client('w'), { roomId: 'R' });

@@ -57,7 +57,7 @@ Unauthenticated connections are rejected immediately.
 | `draw_declined` | `{}` | Draw offer declined |
 | `opponent_disconnected` | `{ roomId, grace: number }` | Opponent left (`grace` in **ms**; 60000). They forfeit if not back in time. |
 | `opponent_reconnected` | `{ roomId, color }` | Opponent came back |
-| `clock_sync` | `{ roomId, timers: { white: ms, black: ms }, serverTime }` | Authoritative clock correction, pushed every 1s to each active room by the deadline sweeper (ADR-0004); client interpolates between pushes |
+| ~~`clock_sync`~~ | — | **Removed by ADR-0034.** Clocks arrive with `move_made`, `game_start` and the `game_state` snapshot (which carries the *live* clock); the client counts down by wall-clock time from the last reading |
 | `invalid_move` | `{ roomId, reason }` | Move rejected — the client rolls its optimistic move back to the last server-agreed position |
 | `rematch_offered` | `{ byUserId }` | Opponent wants a rematch |
 | `rematch_ready` | `{ roomId }` | Both agreed; navigate to the new room (colors swapped) |
@@ -84,7 +84,7 @@ must re-emit on the socket's `connect` event:
 - in a queue → re-emit `join_queue` (`useMatchmakingSocket.ts`)
 
 Without this the socket reconnects but stops receiving `move_made` /
-`clock_sync` / `game_over`, and the game silently freezes.
+`game_over`, and the game silently freezes.
 
 ---
 
@@ -111,3 +111,15 @@ interface RoomPlayer {
   rating:   number;
 }
 ```
+
+---
+
+## Socket guard (ship-plan 0.7–0.9)
+
+Every incoming event on an authenticated socket passes `common/socket-guard.ts` first:
+
+- **Rate:** more than 20 events in a second → the socket is disconnected (`socket_rate_limited`).
+- **Shape:** the payload must be an object; `roomId` must be 6 chars of `[A-Z0-9]`; `move` / `computer_move`
+  need `from`/`to` matching `[a-h][1-8]` and an optional `promotion` in `qrbn`. Anything else is dropped
+  with no reply (`socket_payload_rejected`). A well-formed move that's illegal still gets `invalid_move`.
+- **Size:** frames over 16 KB are refused by Socket.io (`maxHttpBufferSize`).

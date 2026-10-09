@@ -20,6 +20,7 @@ import { parseCorsOrigin } from '../common/utils/cors';
  */
 @WebSocketGateway({
   cors: { origin: parseCorsOrigin(), credentials: true },
+  maxHttpBufferSize: 16_384, // same server as GameGateway; keep the options identical
 })
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class MatchmakingGateway implements OnGatewayInit, OnGatewayDisconnect {

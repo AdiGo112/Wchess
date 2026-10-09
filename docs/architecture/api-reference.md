@@ -16,6 +16,19 @@ All protected routes require: `Authorization: Bearer <accessToken>`
 
 ---
 
+## Health
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/health` | none, never throttled | `200 { status: 'ok', db: 'ok', redis: 'ok' }`, or `503` with the failing one marked `down` |
+
+## Limits (ship-plan Phase 0)
+
+- Register / login / refresh / logout: `AUTH_RATE_LIMIT` per minute per IP (default 10) → `429`.
+- Everything else: 10/s, 50/10s, 300/min per IP → `429`.
+- JSON bodies over 16 KB → `413`. Fields a DTO doesn't declare → `400` (`forbidNonWhitelisted`).
+- Every response carries `x-request-id` (see `infrastructure/logging.md`).
+
 ## Auth
 
 | Method | Path | Auth | Body | Response |

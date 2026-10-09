@@ -1,6 +1,7 @@
 // Runtime verification for feature/server-clocks:
 //  A. sweeper flags a hung game (opponent never claims timeout)
-//  B. clock_sync arrives ~1s cadence with decreasing timer
+//  B. no per-second clock_sync (ADR-0034); flag-fall is on time, not up to 1s late;
+//     a mid-game join snapshot carries the live clock
 //  C. grace: move landing just after 0 but within 500ms is accepted
 //  D. CAS: double-resign race settles the game exactly once
 //  E. flagged game is persisted + rated (the original bug: never saved)
@@ -44,7 +45,7 @@ async function createGame(a, b, timeControl) {
   const res = await fetch(`${API}/matchmaking/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.accessToken}` },
-    body: JSON.stringify({ variant: 'bullet', timeControl, creatorColor: 'white' }),
+    body: JSON.stringify({ timeControl, creatorColor: 'white' }),
   });
   const { token } = await res.json();
   const acc = await fetch(`${API}/matchmaking/challenge/${token}/accept`, {
@@ -58,6 +59,7 @@ async function createGame(a, b, timeControl) {
 const suffix = Date.now().toString(36).slice(-5);
 const u1 = await register(`clkw_${suffix}`);
 const u2 = await register(`clkb_${suffix}`);
+const u3 = await register(`clks_${suffix}`);
 const s1 = await connect(u1.accessToken);
 const s2 = await connect(u2.accessToken);
 
@@ -70,15 +72,24 @@ const s2 = await connect(u2.accessToken);
   const overP = new Promise((r) => s1.on('game_over', (d) => { if (d.roomId === roomId) { over = d; r(); } }));
   s1.emit('join_room', { roomId });
   s2.emit('join_room', { roomId });
-  // White never moves; NOBODY claims timeout. Old code: hangs 24h. New: sweeper flags white ~5.5s.
+  const t0 = Date.now();
+  // A spectator joining 3s in must see white's clock already running.
+  await sleep(3000);
+  const spec = await connect(u3.accessToken);
+  const snap = new Promise((r) => spec.once('game_state', r));
+  spec.emit('join_room', { roomId });
+  const snapshot = await snap;
+  spec.close();
+  // White never moves; NOBODY claims timeout. The sweeper wakes for the deadline (10s + 0.5s grace).
   await Promise.race([overP, sleep(14000)]);
+  const flaggedAfter = Date.now() - t0;
   check('A: sweeper ends hung game without any client claim', !!over,
     over ? `result=${over.result} reason=${over.reason}` : 'no game_over within 14s');
   check('A2: flagged side loses on TIMEOUT', over?.result === 'black' && over?.reason === 'timeout',
     JSON.stringify({ result: over?.result, reason: over?.reason }));
-  check('B: clock_sync pushed every ~1s', syncs.length >= 7 && syncs.length <= 13, `${syncs.length} syncs in ~10.5s`);
-  const decreasing = syncs.every((d, i) => i === 0 || d.timers.white <= syncs[i - 1].timers.white);
-  check('B2: synced white timer monotonically decreasing', decreasing);
+  check('B: no per-second clock_sync', syncs.length === 0, `${syncs.length} syncs`);
+  check('B2: flag falls on the deadline, not on a 1s poll', flaggedAfter >= 10_400 && flaggedAfter <= 11_300, `${flaggedAfter}ms after both joined`);
+  check('B3: join snapshot carries the live clock', snapshot.timers.white <= 7_500 && snapshot.timers.white >= 6_000, `white=${snapshot.timers.white}ms after ~3s`);
   check('E: flagged game persisted + rated', !!over?.ratingChange &&
     typeof over.ratingChange.white.change === 'number',
     JSON.stringify(over?.ratingChange?.white));

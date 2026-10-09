@@ -93,10 +93,11 @@ export class GamesService {
    * Record when the side to move will flag: lastMoveAt + their remaining budget
    * + grace. The sweeper acts only after this moment; every move re-arms it.
    */
-  async setDeadline(room: ActiveRoom): Promise<void> {
+  async setDeadline(room: ActiveRoom): Promise<number> {
     const side = room.fen.split(' ')[1] === 'w' ? 'white' : 'black';
     const deadline = room.lastMoveAt + room.timers[side] + CLOCK_GRACE_MS;
     await this.redis.zadd(DEADLINES_KEY, deadline, room.id);
+    return deadline;
   }
 
   async clearDeadline(roomId: string): Promise<void> {
@@ -106,6 +107,17 @@ export class GamesService {
   /** All room ids currently under clock watch (i.e. active games). */
   async watchedRooms(): Promise<string[]> {
     return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', '+inf');
+  }
+
+  /** Rooms whose deadline (grace included) has passed. */
+  async expiredRooms(now: number): Promise<string[]> {
+    return this.redis.zrangebyscore(DEADLINES_KEY, '-inf', now);
+  }
+
+  /** The earliest deadline on record, or null when no game is running. */
+  async nextDeadline(): Promise<number | null> {
+    const [, score] = await this.redis.zrangeWithScores(DEADLINES_KEY, 0, 0);
+    return score === undefined ? null : Number(score);
   }
 
   /**

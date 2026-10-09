@@ -100,6 +100,27 @@ async function main() {
   // The catch-all has to survive a nested path too, not just a single segment.
   await visit('/profile/edit/nope/deeper', /404|not found|lost|nowhere/i);
 
+  // The CSP (ship-plan 0.3) must not break the vs-computer engine: a same-origin
+  // Worker that compiles WebAssembly. A blocked worker or wasm shows up here as a
+  // timeout, and as a "Refused to …" console error caught by the check below.
+  route = '/lobby (engine)';
+  const res = await page.goto(`${ORIGIN}/lobby`, { waitUntil: 'networkidle' });
+  const csp = res?.headers()['content-security-policy'] ?? '';
+  check('the SPA is served with a Content-Security-Policy', /script-src 'self' 'wasm-unsafe-eval'/.test(csp),
+    csp.slice(0, 80));
+  const engine = await page.evaluate(() => new Promise((resolve) => {
+    const w = new Worker('/engine/stockfish-18-lite-single.js');
+    const timer = setTimeout(() => { w.terminate(); resolve('timeout'); }, 20000);
+    w.onerror = (e) => { clearTimeout(timer); resolve(`error: ${e.message}`); };
+    w.onmessage = (e) => {
+      const line = String(e.data);
+      if (line.includes('uciok')) w.postMessage('isready');
+      if (line.includes('readyok')) { clearTimeout(timer); w.terminate(); resolve('readyok'); }
+    };
+    w.postMessage('uci');
+  }));
+  check('Stockfish WASM worker starts under the CSP', engine === 'readyok', engine);
+
   const noisy = [...errorsByRoute.entries()];
   check('no console errors on any route', noisy.length === 0,
     noisy.map(([r, e]) => `${r}: ${e[0]}`).join(' | '));
