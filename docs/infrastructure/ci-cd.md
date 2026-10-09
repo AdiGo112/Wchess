@@ -58,7 +58,7 @@ In-flight runs for the same ref are cancelled when a new commit arrives.
 | Step | Why it is there |
 |---|---|
 | `npm ci` | Lockfile-exact install. Fails if `package.json` and the lockfile disagree. |
-| `npm audit --omit=dev --audit-level=critical` | Fails on a critical in production dependencies. At `critical`, not `high`, until the NestJS major lands: the 6 remaining highs all need it (ship-plan 0.1). |
+| `npm audit --omit=dev --audit-level=high` | Fails on a high or critical in production dependencies. (Was `critical` until NestJS 11 cleared the last highs.) |
 | `npx prisma generate` | `@prisma/client` types are generated, not committed — nothing typechecks without this. |
 | `npm run lint` | ESLint 9 flat config (`eslint.config.mjs`): `js` + `@typescript-eslint` recommended, no type-aware rules (`nest build` already typechecks). Errors block; `no-explicit-any` is a warning (54 today, mostly Prisma enum casts) so CI stays green while they get paid down. |
 | `npm test` | Jest, 8 suites, 107 tests (incl. `socket-guard.spec.ts`: rate limiter + payload checks): game gateway (moves, clock + grace, flag-fall, resign/draw/timeout settle-once, spectators, abandonment, rematch, computer relay), games service (deadlines, live list, PGN, rating writes), matchmaking (ADR-0008 tolerance, pairing, challenges), auth (register, hashed refresh rotation, bans, logout), Glicko-2 + variant + CORS, `classify.spec.ts`, `openings.spec.ts`. |

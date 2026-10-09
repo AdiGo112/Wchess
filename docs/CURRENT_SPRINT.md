@@ -14,6 +14,17 @@
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`chore/nest-11` — cut from `dev` on 2026-10-10. Ship-plan 0.1 finished: NestJS 10 → 11 (Express 5) clears every
+high audit finding; both CI audit gates now at `high`. **Express 5 gotchas hit (all fixed):**
+- route wildcards need names: `ServeStaticModule` exclude `/api/(.*)` → `/api/{*path}` (the old form 500'd every
+  SPA/unknown route); nestjs-pino `forRoutes` set to `{*path}` to silence the legacy-route warning;
+- `@nestjs/serve-static` 5 rewrites **any** error on an excluded `/api` route into "Cannot POST …" 404, which hid
+  body-parser 413/400s; now answered by an error handler right after the parser (`http-security.ts`), app created
+  with `bodyParser: false` so that parser is the only one;
+- `@nestjs/jwt` 11 types `expiresIn` as an ms-style duration; `JWT_EXPIRES_IN` is cast.
+Checks: 107 Jest, lint 0 errors, all 9 verify scripts green (security 11/11 incl. a new malformed-JSON check),
+bench counts unchanged (latency single-run noise, see performance-plan Phase 0 note).
+
 `chore/security-hardening` — cut from `feature/lean-realtime` (not `dev`: both touch the gateway) on
 2026-10-09. Ship plan Phase 0. Done: **0.1 partial** (`npm audit fix`: backend 0 critical / 6 high left,
 all needing a NestJS major; frontend 0 high) and **0.13 logging** (Pino + `nestjs-pino` 4.6.1, request
