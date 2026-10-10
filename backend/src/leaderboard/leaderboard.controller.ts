@@ -1,12 +1,14 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiQuery } from '@nestjs/swagger';
 import { LeaderboardService, Period } from './leaderboard.service';
+import { Public } from '../auth/jwt-auth.guard';
 
 const PERIODS: Period[] = ['all', 'week', 'month'];
 const toPeriod = (p?: string): Period =>
   PERIODS.includes(p as Period) ? (p as Period) : 'all';
 
 @ApiTags('leaderboard')
+@Public()
 @Controller('leaderboard')
 export class LeaderboardController {
   constructor(private leaderboard: LeaderboardService) {}

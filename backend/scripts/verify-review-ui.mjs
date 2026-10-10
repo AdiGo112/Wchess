@@ -91,6 +91,10 @@ async function main() {
 
   // ---- 1. history rows link into the review ----
   await page.goto(`${ORIGIN}/history`, { waitUntil: 'networkidle' });
+  // A full page load: the session can only come back from the HttpOnly cookie (ship-plan 1.1).
+  const visible = await page.evaluate(() => document.cookie + JSON.stringify(sessionStorage) + JSON.stringify(localStorage));
+  check('session survives a reload, token unreadable by page JS',
+    !page.url().includes('/login') && !/rt=|refresh/i.test(visible), page.url());
   const link = page.locator(`a[href="/review/${game.id}"]`);
   check('a history row links to the review page', (await link.count()) > 0);
   if (await link.count()) await link.first().click();

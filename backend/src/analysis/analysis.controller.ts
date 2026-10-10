@@ -1,7 +1,7 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AnalysisService } from './analysis.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/jwt-auth.guard';
 
 @ApiTags('analysis')
 @Controller('analysis')
@@ -9,7 +9,6 @@ export class AnalysisController {
   constructor(private analysis: AnalysisService) {}
 
   @Post(':gameId')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Queue a depth-18 analysis of a finished game',
@@ -18,10 +17,11 @@ export class AnalysisController {
       'Already-analysed games return their stored row instead of re-running. ' +
       'Authed because it is the only route on this server that costs real CPU.',
   })
-  request(@Param('gameId') gameId: string) {
-    return this.analysis.request(gameId);
+  request(@Param('gameId') gameId: string, @Request() req: any) {
+    return this.analysis.request(gameId, req.user.id);
   }
 
+  @Public()
   @Get(':gameId')
   @ApiOperation({
     summary: 'Read a game analysis',

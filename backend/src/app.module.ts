@@ -14,6 +14,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { loggerModule } from './common/logging';
 import { HealthController } from './health.controller';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -52,6 +53,9 @@ import { HealthController } from './health.controller';
     // Actually enforce the ThrottlerModule config above on every HTTP route.
     // (Global guards don't bind to WS gateways, so sockets are unaffected.)
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Deny by default: routes opt out with @Public() (ship-plan 1.2). After the
+    // throttler, so unauthenticated floods are still counted.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

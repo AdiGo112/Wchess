@@ -16,7 +16,7 @@ import { RefreshDto } from './dto/refresh.dto';
  * both the login and rotation sites, which left REFRESH_TOKEN_EXPIRES_DAYS in
  * .env doing nothing and let the two sites drift apart.
  */
-const REFRESH_TOKEN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 30;
+export const REFRESH_TOKEN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 30;
 
 function refreshTokenExpiry(): Date {
   return new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
