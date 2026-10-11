@@ -10,8 +10,8 @@ First deploy via PRs #12 (dev→staging) + #13 (staging→main). Neon (Singapore
 pings `/health/live` every 10 min. Backup run #1 green (`db-1`, encrypted). Live checks from Pune: health ok, Swagger
 404, private routes 401, http→https 301, HSTS + CSP + nosniff + frame-deny. API 120–260 ms (Cloudflare BOM → Render
 Singapore). PR #14: static asset caching (everything was `max-age=0`) + Actions on Node 24.
-**Still to do:** per-IP throttle test from a second network (`TRUST_PROXY`, Cloudflare is in front), Sentry (1.7),
-ZAP (1.9).
+Throttle fixed + verified live (`CLIENT_IP_HEADER`, PR #15). 1.9 done: ZAP baseline (`.github/workflows/zap.yml`, weekly + manual, AJAX spider on): **0 FAIL, 0 high, 60 PASS** against production. Fixed: Permissions-Policy header. Accepted with reasons in `.zap/rules.tsv`: CSP `style-src 'unsafe-inline'` (react-hot-toast injects a `<style>`), SRI on Google Fonts (CSS varies per browser; upgrade path = self-host fonts), COEP (only for SharedArrayBuffer), 3 informational. Also: 429s now say "Too many attempts. Please wait a minute and try again." instead of `ThrottlerException: Too Many Requests`.
+**Still to do:** Sentry (1.7). Then the scaling lab.
 
 ## Next Up
 **Ship plan** — [`infrastructure/ship-plan.md`](infrastructure/ship-plan.md). Phase 0 done; Phase 1.1–1.5 done. **Host chosen 2026-10-11: Render + Neon** (ADR-0035);

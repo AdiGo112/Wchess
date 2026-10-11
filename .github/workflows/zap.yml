@@ -1,0 +1,27 @@
+# OWASP ZAP baseline scan of production (ship-plan 1.9).
+# Baseline = spider + passive rules only: it reads responses (headers, cookies,
+# leaked info) and sends no attack payloads, so it is safe against the live site.
+# Report-only for now: findings land in the run's artifact, no issues are filed.
+name: zap
+
+on:
+  schedule:
+    - cron: "0 21 * * 0" # Monday 02:30 IST, weekly
+  workflow_dispatch:
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5 # for the rules file
+      - uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: https://wchess.onrender.com
+          rules_file_name: .zap/rules.tsv
+          # -j: also run the AJAX spider, which drives a browser; the app is a React SPA,
+          # so the plain spider only sees index.html.
+          cmd_options: -j
+          allow_issue_writing: false
+          fail_action: false
+          artifact_name: zap-report

@@ -135,7 +135,8 @@ milestone, done first as a **local lab** with published numbers:
 ## CI/CD
 
 `.github/workflows/ci.yml` runs backend (test + build), frontend (typecheck + build) and a
-branch-promotion guard. `.github/workflows/backup.yml` is the nightly dump above. Render
+branch-promotion guard. `.github/workflows/backup.yml` is the nightly dump above; `.github/workflows/zap.yml` is a weekly
+OWASP ZAP baseline scan of production (passive only; triage lives in `.zap/rules.tsv`). Render
 auto-deploys `main` on push, so there is no deploy job.
 
 See **[`ci-cd.md`](./ci-cd.md)** for what each step checks and the
