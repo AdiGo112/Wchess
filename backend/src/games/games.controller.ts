@@ -1,7 +1,7 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { GamesService } from './games.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/jwt-auth.guard';
 
 @ApiTags('games')
 @Controller('games')
@@ -9,7 +9,6 @@ export class GamesController {
   constructor(private gamesService: GamesService) {}
 
   @Get('history/:userId')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   getHistory(
     @Param('userId') userId: string,
@@ -21,12 +20,12 @@ export class GamesController {
 
   // Declared before ':id' so "live" isn't swallowed as a game id.
   @Get('live')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   getLive() {
     return this.gamesService.liveGames();
   }
 
+  @Public()
   @Get(':id')
   getGame(@Param('id') id: string) {
     return this.gamesService.getGame(id);

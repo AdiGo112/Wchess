@@ -6,6 +6,8 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 const api = axios.create({
   baseURL: `${import.meta.env.VITE_SERVER_URL || ""}/api/v1`,
   headers: { "Content-Type": "application/json" },
+  // Sends the HttpOnly refresh cookie when VITE_SERVER_URL is another origin; same-origin sends it anyway.
+  withCredentials: true,
 });
 
 type GetToken = () => string | null;

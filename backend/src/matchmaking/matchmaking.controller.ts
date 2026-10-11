@@ -5,10 +5,8 @@ import {
   Param,
   Post,
   Request,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MatchmakingService } from './matchmaking.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { CreateComputerGameDto } from './dto/create-computer-game.dto';
@@ -16,7 +14,6 @@ import { CreateComputerGameDto } from './dto/create-computer-game.dto';
 @ApiTags('matchmaking')
 @ApiBearerAuth()
 @Controller('matchmaking')
-@UseGuards(JwtAuthGuard)
 export class MatchmakingController {
   constructor(private readonly matchmaking: MatchmakingService) {}
 
