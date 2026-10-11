@@ -14,6 +14,9 @@ async function bootstrap() {
   const logger = app.get(Logger);
   app.useLogger(logger);
   applyHttpSecurity(app);
+  // SIGTERM from the host runs onModuleDestroy: Redis quits, Prisma disconnects,
+  // the analysis engine is killed (ship-plan 1.5).
+  app.enableShutdownHooks();
 
   app.setGlobalPrefix('api/v1');
 

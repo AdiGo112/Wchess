@@ -96,7 +96,7 @@ Diagram: `Diagrams.md` §3.
 |---|---|---|
 | **PostgreSQL** | User, RefreshToken, UserRating, Game, GameAnalysis, Challenge | Durable. The system of record. |
 | **Redis** | `game:room:{id}` (the live game), `clock:deadlines` (the sweeper's ZSET), `queue:{variant}:{tc}`, `leaderboard:{variant}`, `online:{userId}`, `user:socket:{userId}`, `socket:{socketId}` | Ephemeral and rebuildable — a full flush costs in-flight games only; boards reseed from Postgres. |
-| **Browser** | access token (memory, `useRef`), refresh token (`sessionStorage`) | Tab lifetime. Never `localStorage` — an XSS-readable long-lived token is the thing rotation exists to limit. |
+| **Browser** | access token (memory, `useRef`); refresh token in the `rt` cookie (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth`) | Access token: page lifetime. Cookie: `REFRESH_TOKEN_EXPIRES_DAYS`, shared by every tab. No script can read it, so an XSS can't walk off with a long-lived token — the thing rotation exists to limit. |
 
 Full keyspace with TTLs: `Diagrams.md` §15. ER diagram: §14.
 

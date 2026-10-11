@@ -89,10 +89,14 @@ export default function GameReview() {
         if (cancelled) return;
         requested.current = true; // don't hammer a server that just said no
         const status = (err as { response?: { status?: number } })?.response?.status;
+        // A 429 carries a message that says which per-user limit was hit.
+        const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
         setError(
           status === 503
             ? "The analysis queue is busy. Try again in a minute."
-            : "Analysis could not be started.",
+            : status === 429 && message
+              ? `${message}.`
+              : "Analysis could not be started.",
         );
       }
     };

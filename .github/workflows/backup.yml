@@ -1,0 +1,44 @@
+# Nightly Postgres backup (ship-plan 1.8, ADR-0035). Neon's free plan only
+# keeps a short restore window, and a free tier can change its terms, so this
+# keeps 30 days of dumps that don't depend on Neon at all.
+#
+# The repo is PUBLIC and so are its workflow artifacts: the dump is encrypted
+# (AES-256, gpg symmetric) before upload. It holds emails and password hashes.
+# Restore steps: docs/infrastructure/deploy.md.
+name: backup
+
+on:
+  schedule:
+    - cron: "30 20 * * *" # 02:00 IST
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump and encrypt
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::BACKUP_DATABASE_URL / BACKUP_PASSPHRASE not set, skipping"
+            exit 0
+          fi
+          # pg_dump must be at least the server's major version; a newer one dumps older servers fine.
+          docker run --rm -e DATABASE_URL postgres:18-alpine \
+            sh -c 'pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL"' > db.dump
+          test -s db.dump
+          # Passphrase on stdin, not argv, so it never shows in a process list.
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-fd 0 --symmetric --cipher-algo AES256 -o db.dump.gpg db.dump
+          rm db.dump
+          ls -l db.dump.gpg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-${{ github.run_number }}
+          path: db.dump.gpg
+          retention-days: 30
+          if-no-files-found: ignore
