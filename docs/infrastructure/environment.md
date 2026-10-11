@@ -73,6 +73,7 @@ VITE_SERVER_URL=http://localhost:3100
 | `PORT` | No (default `3100`) | API server port. |
 | `NODE_ENV` | No | `development` or `production`. `production` switches logs to JSON lines (see `logging.md`). |
 | `AUTH_RATE_LIMIT` | No (default `10`) | Requests per minute per IP to register/login/refresh/logout. Raise it locally when running verify scripts that log in many users (`AUTH_RATE_LIMIT=1000 node dist/main`). |
+| `CLIENT_IP_HEADER` | No (default unset → `req.ip`) | Header the edge proxy sets with the real client IP; the throttler counts against it (`clientIp()` in `http-security.ts`). **`cf-connecting-ip` on Render.** Only set it when that proxy is the sole way in, or clients can choose their own throttle bucket. |
 | `TRUST_PROXY` | No (default off) | Number of proxy hops in front of the app. **Set `1` on any host with a load balancer**, or every user shares the proxy's IP for rate limiting. Leave unset with no proxy, or clients can spoof their IP. |
 | `LOG_LEVEL` | No (default `debug` in dev, `info` in prod) | Pino level: `debug` adds one line per move. |
 | `CORS_ORIGIN` | No (default `http://localhost:5173`) | Allowed browser origin(s). `*` = reflect any origin (demo/tunnel only); comma-separated = allow-list. Parsed by `common/utils/cors.ts`, applied to REST in `main.ts` and to both socket gateways. |

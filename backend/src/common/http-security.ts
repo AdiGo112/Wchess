@@ -27,6 +27,20 @@ const headers = helmet({
   },
 });
 
+/**
+ * The IP the throttler counts against. CLIENT_IP_HEADER names a header the edge
+ * proxy sets itself (`cf-connecting-ip` on Render, which sits behind Cloudflare).
+ * Needed because TRUST_PROXY=1 alone resolved to Render's rotating proxy IPs:
+ * measured in production 2026-10-11, 13 requests from one client spread over
+ * several buckets and never hit 429. Only set it when that proxy is the sole way
+ * in; otherwise a client can send the header itself and pick its own bucket.
+ */
+export function clientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
+  const name = process.env.CLIENT_IP_HEADER?.toLowerCase();
+  const value = name ? req.headers[name] : undefined;
+  return (typeof value === 'string' && value.trim()) || req.ip || 'unknown';
+}
+
 /** Ship-plan Phase 0: headers (0.3), proxy-aware client IPs (0.6), small bodies (0.9). */
 export function applyHttpSecurity(app: NestExpressApplication) {
   // Swagger UI needs inline scripts; it only exists outside production anyway (0.4).
