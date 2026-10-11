@@ -42,6 +42,10 @@ create for free: the database (Neon) and the pinger (cron-job.org). Production d
 
 1. **Neon.** Sign up at neon.com → create a project, region **AWS Asia Pacific (Singapore)**
    (next to Render's Singapore region; latency between the app and the DB counts on every query).
+   Render has no India region; Singapore is its nearest to the players (Pune ≈ 60–80 ms). Pick
+   Singapore on Neon even if it offers Mumbai: the DB must sit next to the **app**, not the user,
+   or every query pays the Mumbai ↔ Singapore round trip. Render can't change a service's region
+   after creation, so get it right the first time.
    Copy the connection string: **direct**, not pooled (one long-lived app instance doesn't
    need the pooler, and `prisma migrate` wants a direct connection). It must end with
    `?sslmode=require`.
