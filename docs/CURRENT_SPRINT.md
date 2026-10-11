@@ -23,6 +23,8 @@ secrets), then verify against the live URL, Sentry (1.7), ZAP (1.9).** After lau
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`feature/board-input` — cut from `dev` on 2026-10-11 (Adi's asks 1–3). Board input: **click-to-move** (click a piece → dots on quiet targets, rings on captures → click a target) alongside drag, shared by live games and practice via `hooks/useMoveInput.ts`; **promotion picker** (`components/PromotionPicker.tsx`, Q/R/B/N, Esc or click-outside cancels) replaces auto-queen; **guest practice vs Stockfish at `/play`**: no account, runs entirely in the browser (chess.js + the WASM worker), take-back, switch sides, difficulty; Home + the nav's Play link send guests there. New `backend/scripts/verify-board-input.mjs` 9/9 (click moves reach the server, picker → `bxa8=N`, guest game + engine reply + take-back, no console errors).
+
 `chore/render-deploy` — cut from `dev` on 2026-10-11. Render + Neon deploy setup (ADR-0035): `render.yaml` Blueprint (web + Key Value with `noeviction`, private only), `/health/live` liveness route, challenge links fall back to `RENDER_EXTERNAL_URL`, nightly encrypted `pg_dump` (`backup.yml`, restore tested), `deployment.md` rewritten as the click-through guide. Not deployed yet: needs Adi's accounts.
 
 `chore/phase1-hardening` — cut from `dev` on 2026-10-10. Phase 1 (1.1–1.5) on `chore/phase1-hardening`: refresh token in an HttpOnly `rt` cookie, deny-by-default JWT guard with `@Public()`, public-profile leak fixed (allowlist), per-user analysis limits, shutdown hooks. 110 Jest; verify security 20/20, pages 18/18, review-ui 23/23, analysis 14/14, clocks 11/11, hardening 22/22, leaderboard 16/16, spectate 9/9, join-authz 2/2.

@@ -55,10 +55,10 @@ export default function Home() {
               {user ? "Play now →" : "Join free →"}
             </button>
             <button
-              onClick={() => navigate("/leaderboard")}
+              onClick={() => navigate("/play")}
               className="btn-b text-lg px-8 py-4"
             >
-              Leaderboard
+              Play the computer{user ? "" : " (no sign-up)"}
             </button>
           </div>
         </div>
@@ -79,24 +79,27 @@ export default function Home() {
           {
             glyph: "⚡",
             title: "QUICK MATCH",
+            to: "/lobby",
             body: "Queue up. Get paired by rating in seconds. Bullet to classical.",
           },
           {
             glyph: "🔗",
             title: "CHALLENGE A FRIEND",
+            to: "/lobby",
             body: "One link. Send it anywhere. First click gets the game.",
           },
           {
             glyph: "🤖",
             title: "FIGHT THE MACHINE",
-            body: "Stockfish runs in YOUR browser. Five difficulties, zero excuses.",
+            to: "/play",
+            body: "Stockfish runs in YOUR browser. Five difficulties, zero excuses. No account needed.",
           },
         ].map((c) => (
           <button
             key={c.title}
             type="button"
             className="card-b text-left hover:-translate-y-1 hover:shadow-brutal-lg transition-all cursor-pointer"
-            onClick={() => navigate("/lobby")}
+            onClick={() => navigate(c.to)}
           >
             <span className="text-3xl grayscale" aria-hidden="true">{c.glyph}</span>
             <h3 className="heading-b text-xl mt-3">{c.title}</h3>
