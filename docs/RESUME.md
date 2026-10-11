@@ -21,7 +21,7 @@ cd backend && npx prisma migrate dev        # run migrations
 There is no seed script — `backend/package.json` has no `prisma.seed` entry and
 no `prisma/seed.ts` exists. Register users through the app or a verify script.
 
-**Latest (2026-10-11):** click-to-move, promotion picker and guest `/play` on `feature/board-input`. Before that: 🚀 **live at https://wchess.onrender.com** (Render deploys `main`). Host chosen, Render + Neon (ADR-0035); deploy steps in `docs/infrastructure/deployment.md`, config in `render.yaml`. Before that (2026-10-10): ship-plan Phase 1 (1.1–1.5) on `chore/phase1-hardening` — the refresh token is now an HttpOnly cookie (nothing in `sessionStorage`), every route is private unless `@Public()`. Before that: NestJS 11 on `chore/nest-11`; ship-plan Phase 0 complete. Before that: Phase 0 security hardening. Multi-user verify scripts need `AUTH_RATE_LIMIT=1000` on the backend; `verify-security.mjs` needs the default. Before that: Pino logging on `chore/security-hardening` — run the backend and the terminal tells the story of every game (`docs/infrastructure/logging.md`). Before that: ADR-0034 event-driven clock sweeper on `feature/lean-realtime` — benchmark with `cd frontend && node scripts/bench-live.mjs <label>` (needs zero live games). Before that: lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
+**Latest (2026-10-11):** opt-in post-game analysis (server for saved games, browser for practice) on `feature/post-game-analysis`. Before that: click-to-move, promotion picker and guest `/play` on `feature/board-input`. Before that: 🚀 **live at https://wchess.onrender.com** (Render deploys `main`). Host chosen, Render + Neon (ADR-0035); deploy steps in `docs/infrastructure/deployment.md`, config in `render.yaml`. Before that (2026-10-10): ship-plan Phase 1 (1.1–1.5) on `chore/phase1-hardening` — the refresh token is now an HttpOnly cookie (nothing in `sessionStorage`), every route is private unless `@Public()`. Before that: NestJS 11 on `chore/nest-11`; ship-plan Phase 0 complete. Before that: Phase 0 security hardening. Multi-user verify scripts need `AUTH_RATE_LIMIT=1000` on the backend; `verify-security.mjs` needs the default. Before that: Pino logging on `chore/security-hardening` — run the backend and the terminal tells the story of every game (`docs/infrastructure/logging.md`). Before that: ADR-0034 event-driven clock sweeper on `feature/lean-realtime` — benchmark with `cd frontend && node scripts/bench-live.mjs <label>` (needs zero live games). Before that: lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
 
 **Earlier (2026-09-25):** spectate shipped on `feature/spectate` — Lobby → *Watch live*. Verify with
 `node frontend/scripts/verify-spectate.mjs` against a running backend (9 checks).
@@ -76,6 +76,11 @@ and a client-submitted verdict on a shared game row is unauthenticated data — 
 the server runs the same wasm build in a child process. Same binary, opposite
 reasons.
 
+**And a third use (2026-10-11):** games the server never saved (practice at `/play`, vs computer)
+are analysed by the browser's worker at depth 14 (`lib/browserAnalysis.ts`) with the server's own
+`classify.ts`. The verdict stays in that tab, so the "unauthenticated data on a shared row" concern
+doesn't apply: there is no shared row.
+
 ### Frontend — what exists
 
 Everything under `frontend/src` is TypeScript (`.ts`/`.tsx`) since the
@@ -90,7 +95,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 | Lobby / Matchmaking | `frontend/src/pages/Lobby.tsx` | ✅ | Quick match (live queue position) / friend challenge / vs-computer; `/challenge/:token` accept page |
 | Leaderboard page | `frontend/src/pages/Leaderboard.tsx` | ✅ | Variant tabs + period filter + own-rank row |
 | GameHistory page | `frontend/src/pages/GameHistory.tsx` | ✅ | Wired to `GET /games/history/:userId`; every row links into the review |
-| Game review page | `frontend/src/pages/GameReview.tsx` | ✅ | `/review/:gameId` — eval bar, step-through board, annotated move list, per-player accuracy. Queues its own analysis on open. |
+| Game review page | `frontend/src/pages/GameReview.tsx` | ✅ | `/review/:gameId` (public) — eval bar, step-through board, annotated move list, per-player accuracy. Analysis is **opt-in** (button, or `?analyze=1`); `/review/local` reviews an unsaved game from router state with in-browser analysis. |
 | Profile page | `frontend/src/pages/Profile.tsx` | ✅ | Real per-variant ratings, W/L/D and recent games; `/profile/edit` saves via `PATCH /users/me`. No avatar upload. |
 | Player directory | `frontend/src/components/PlayerList.tsx` | ✅ | Wired to `GET /users` |
 | Home page | `frontend/src/pages/Home.tsx` | Partial | Hero + mode cards; no puzzle widget or activity feed (both deferred) |

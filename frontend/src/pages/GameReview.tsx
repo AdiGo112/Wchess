@@ -1,10 +1,24 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import api from "../api";
+import { useAuth } from "../context/AuthContext";
 import useBoardFit from "../hooks/useBoardFit";
+import { analyseInBrowser, BROWSER_DEPTH } from "../lib/browserAnalysis";
 import type { AnalysedMove, AnalysisResponse, GameRecord, MoveClassification } from "../types";
+
+/** What the review needs of a game: a saved row, or a practice game handed over in router state. */
+type ReviewGame = Pick<GameRecord, "moves" | "whiteUsername" | "blackUsername" | "openingEco" | "openingName">;
+
+/** Router state for /review/local: a game that was never saved (practice, vs computer). */
+export interface LocalReviewState {
+  moves: string[];
+  white: string;
+  black: string;
+  /** Start the engine straight away (the end-of-game "Analyze" button). */
+  analyze?: boolean;
+}
 
 /* Same strict-mono board as the live game (design system: no hue anywhere). */
 const LIGHT_SQ = "#d6d6d6";
@@ -50,63 +64,93 @@ const COUNTED: MoveClassification[] = ["BEST", "EXCELLENT", "GOOD", "INACCURACY"
 
 export default function GameReview() {
   const { gameId } = useParams<{ gameId: string }>();
-  const [game, setGame] = useState<GameRecord | null>(null);
+  const { user } = useAuth();
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const local = gameId === "local" ? (location.state as LocalReviewState | null) : null;
+  const isLocal = gameId === "local";
+
+  const [game, setGame] = useState<ReviewGame | null>(
+    local ? { moves: local.moves, whiteUsername: local.white, blackUsername: local.black } : null,
+  );
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [ply, setPly] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  // A sweep is queued at most once per page visit, even though the poll below
-  // re-reads status every two seconds.
-  const requested = useRef(false);
 
-  // The game itself renders immediately; analysis arrives whenever it arrives.
+  // Saved games: the row renders immediately; analysis is only read here, never
+  // started. Reading a finished analysis is free; running one is the user's call.
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || isLocal) return;
     api
       .get<GameRecord>(`/games/${gameId}`)
       .then((res) => setGame(res.data))
       .catch(() => setError("That game does not exist."));
-  }, [gameId]);
+    api
+      .get<AnalysisResponse>(`/analysis/${gameId}`)
+      .then((res) => setAnalysis(res.data))
+      .catch(() => undefined);
+  }, [gameId, isLocal]);
 
+  // Poll while a server sweep runs (started here or by an earlier visit).
   useEffect(() => {
-    if (!gameId) return undefined;
-    let timer: ReturnType<typeof setTimeout>;
-    let cancelled = false;
+    if (isLocal || analysis?.status !== "running") return undefined;
+    const t = setTimeout(
+      () => api.get<AnalysisResponse>(`/analysis/${gameId}`).then((res) => setAnalysis(res.data)).catch(() => undefined),
+      2000,
+    );
+    return () => clearTimeout(t);
+  }, [analysis, gameId, isLocal]);
 
-    const poll = async () => {
-      try {
-        const { data } = await api.get<AnalysisResponse>(`/analysis/${gameId}`);
-        if (cancelled) return;
-        setAnalysis(data);
-
-        if (data.status === "none" && !requested.current) {
-          requested.current = true;
-          // Increment 5: opening the review IS the request. The user navigated
-          // here on purpose, so there is no button to press first.
-          await api.post(`/analysis/${gameId}`);
-        }
-        if (data.status !== "done") timer = setTimeout(poll, 2000);
-      } catch (err: unknown) {
-        if (cancelled) return;
-        requested.current = true; // don't hammer a server that just said no
-        const status = (err as { response?: { status?: number } })?.response?.status;
-        // A 429 carries a message that says which per-user limit was hit.
-        const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        setError(
-          status === 503
-            ? "The analysis queue is busy. Try again in a minute."
-            : status === 429 && message
-              ? `${message}.`
-              : "Analysis could not be started.",
-        );
-      }
-    };
-
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+  const requestServer = useCallback(async () => {
+    setError(null);
+    try {
+      const { data } = await api.post<AnalysisResponse>(`/analysis/${gameId}`);
+      setAnalysis(data);
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      // A 429 carries a message that says which per-user limit was hit.
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(
+        status === 503
+          ? "The analysis queue is busy. Try again in a minute."
+          : status === 429 && message
+            ? message
+            : "Analysis could not be started.",
+      );
+    }
   }, [gameId]);
+
+  // Unsaved games: Stockfish in this tab (lib/browserAnalysis), never stored.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+  const runLocal = useCallback(async () => {
+    if (!game || abortRef.current) return;
+    const ctrl = (abortRef.current = new AbortController());
+    setError(null);
+    try {
+      const score = await analyseInBrowser(game.moves, (done, total) => setProgress({ done, total }), ctrl.signal);
+      setAnalysis({ status: "done", gameId: "local", ...score });
+    } catch {
+      if (!ctrl.signal.aborted) setError("The engine stopped. Try again.");
+    } finally {
+      abortRef.current = null;
+      setProgress(null);
+    }
+  }, [game]);
+
+  // The end-of-game "Analyze" button asks for the engine up front.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || !game) return;
+    if (isLocal && local?.analyze) {
+      autoStarted.current = true;
+      runLocal();
+    } else if (!isLocal && params.get("analyze") && user && analysis?.status === "none") {
+      autoStarted.current = true;
+      requestServer();
+    }
+  }, [game, isLocal, local, params, user, analysis, runLocal, requestServer]);
 
   /** Every position of the game, replayed once from the stored SAN list. */
   const fens = useMemo(() => {
@@ -176,13 +220,16 @@ export default function GameReview() {
     [moves],
   );
 
-  if (error && !game) {
+  // A practice game lives only in router state, so a reload or a pasted link has nothing to show.
+  if ((error && !game) || (isLocal && !game)) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
         <h1 className="heading-b text-4xl mb-4">NO SUCH GAME</h1>
-        <p className="mb-6 text-xs font-bold uppercase tracking-widest text-neutral-500">{error}</p>
-        <Link to="/history" className="btn-b">
-          Back to history
+        <p className="mb-6 text-xs font-bold uppercase tracking-widest text-neutral-500">
+          {isLocal ? "Practice games aren't saved, so this one is gone." : error}
+        </p>
+        <Link to={isLocal ? "/play" : "/history"} className="btn-b">
+          {isLocal ? "Play again" : "Back to history"}
         </Link>
       </div>
     );
@@ -199,7 +246,8 @@ export default function GameReview() {
     );
   }
 
-  const running = analysis?.status !== "done";
+  const done = analysis?.status === "done";
+  const running = analysis?.status === "running" || progress !== null;
 
   return (
     <div className="h-full flex flex-col gap-3">
@@ -214,8 +262,9 @@ export default function GameReview() {
             {game.openingEco} {game.openingName}
           </span>
         )}
-        <Link to="/history" className="btn-b btn-b-sm ml-auto">
-          Back to history
+        {isLocal && <span className="tag-b">Practice · not saved</span>}
+        <Link to={isLocal ? "/play" : "/history"} className="btn-b btn-b-sm ml-auto">
+          {isLocal ? "New game" : "Back to history"}
         </Link>
       </div>
 
@@ -246,14 +295,14 @@ export default function GameReview() {
         {/* Eval bar — White's share of the position, immediately right of the board */}
         {!fit.stacked && (
           <div className="shrink-0 flex flex-col items-center justify-center gap-2">
-            <span className="font-mono text-xs font-bold">{running ? "··" : label}</span>
+            <span className="font-mono text-xs font-bold">{done ? label : "··"}</span>
             <div
               className="w-6 border-[3px] border-ink bg-ink relative"
               style={{ height: fit.size - 28 }}
             >
               <div
                 className="absolute bottom-0 left-0 right-0 bg-white transition-[height] duration-200"
-                style={{ height: `${running ? 50 : share}%` }}
+                style={{ height: `${done ? share : 50}%` }}
               />
             </div>
           </div>
@@ -267,18 +316,41 @@ export default function GameReview() {
         >
           {running ? (
             <div className="card-b-flat text-center shrink-0">
-              {error ? (
-                <p className="text-xs font-bold uppercase tracking-widest">{error}</p>
+              <div className="loader-b mx-auto mb-3" />
+              <p className="text-xs font-bold uppercase tracking-widest">
+                Stockfish is judging you<span className="animate-blink">_</span>
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-2">
+                {progress
+                  ? `depth ${BROWSER_DEPTH} in your browser · position ${progress.done}/${progress.total}`
+                  : "depth 18 on our server, every move. about a minute."}
+              </p>
+              {progress && (
+                <div className="mt-3 h-2 border-[2px] border-ink">
+                  <div className="h-full bg-ink" style={{ width: `${(100 * progress.done) / progress.total}%` }} />
+                </div>
+              )}
+            </div>
+          ) : !done ? (
+            // Analysis is opt-in: stepping through the moves needs no engine.
+            <div className="card-b-flat shrink-0">
+              <h3 className="heading-b text-sm mb-2 border-b-[3px] border-ink pb-2">Engine analysis</h3>
+              <p className="text-xs font-medium text-neutral-600 mb-3">
+                Stockfish checks every move: accuracy for both sides, blunders and mistakes marked,
+                the best move shown where you went wrong.
+                {isLocal
+                  ? ` Runs in your browser (depth ${BROWSER_DEPTH}), about a minute; nothing is saved.`
+                  : " Runs on our server (depth 18), about a minute; saved with the game."}
+              </p>
+              {error && <p className="text-xs font-bold uppercase tracking-widest mb-3">{error}</p>}
+              {isLocal || user ? (
+                <button type="button" onClick={isLocal ? runLocal : requestServer} className="btn-b btn-b-primary w-full">
+                  Analyze game
+                </button>
               ) : (
-                <>
-                  <div className="loader-b mx-auto mb-3" />
-                  <p className="text-xs font-bold uppercase tracking-widest">
-                    Stockfish is judging you<span className="animate-blink">_</span>
-                  </p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 mt-2">
-                    depth 18, every move. about a minute.
-                  </p>
-                </>
+                <Link to="/login" state={{ from: location }} className="btn-b w-full text-center">
+                  Log in to analyze
+                </Link>
               )}
             </div>
           ) : (

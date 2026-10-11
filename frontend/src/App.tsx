@@ -63,6 +63,8 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           {/* Practice vs Stockfish: runs entirely in the browser, so no account needed */}
           <Route path="/play" element={<PlayComputer />} />
+          {/* Public: saved games are public reads, and /review/local is a guest's practice game */}
+          <Route path="/review/:gameId" element={<GameReview />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
@@ -73,7 +75,6 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/edit" element={<ProfileEdit />} />
             <Route path="/history" element={<GameHistory />} />
-            <Route path="/review/:gameId" element={<GameReview />} />
           </Route>
 
           {/* Anything else — a typo or a stale bookmark — rendered a blank

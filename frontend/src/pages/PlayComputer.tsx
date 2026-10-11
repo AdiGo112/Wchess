@@ -1,5 +1,5 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Chess, Square } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +9,7 @@ import useMoveInput, { type PromotionPiece } from "../hooks/useMoveInput";
 import PromotionPicker from "../components/PromotionPicker";
 import DifficultySlider from "../components/DifficultySlider";
 import { playMoveSound, playSound } from "../lib/sound";
+import type { LocalReviewState } from "./GameReview";
 
 const LIGHT_SQ = "#d6d6d6";
 const DARK_SQ = "#3a3a3a";
@@ -24,6 +25,7 @@ type Side = "w" | "b";
  */
 export default function PlayComputer() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [side, setSide] = useState<Side>("w");
   const [difficulty, setDifficulty] = useState(3);
   const [history, setHistory] = useState<string[]>([]); // SAN, replayed into a fresh Chess
@@ -89,6 +91,17 @@ export default function PlayComputer() {
     playSound("start");
   };
 
+  // Hand the finished game to the review page; the engine is the player's choice.
+  const review = (analyze: boolean) => {
+    const state: LocalReviewState = {
+      moves: history,
+      white: side === "w" ? (user?.username ?? "You") : "Stockfish",
+      black: side === "b" ? (user?.username ?? "You") : "Stockfish",
+      analyze,
+    };
+    navigate("/review/local", { state });
+  };
+
   // Take back your last move (and the engine's reply to it).
   const takeBack = () => setHistory((h) => h.slice(0, Math.max(0, h.length - (chess.turn() === side ? 2 : 1))));
 
@@ -139,10 +152,20 @@ export default function PlayComputer() {
           </div>
 
           <div className={`flex flex-col gap-3 min-h-0 ${fit.stacked ? "w-full max-w-[560px]" : "flex-1 min-w-0 max-w-[360px]"}`}>
-            <div className="card-b-flat">
+            <div className={chess.isGameOver() ? "card-b-inverse" : "card-b-flat"}>
               <p className="font-bold uppercase tracking-wider text-sm" role="status" aria-live="polite">
                 {status}
               </p>
+              {chess.isGameOver() && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <button type="button" className="btn-b" onClick={() => review(false)}>
+                    Review moves
+                  </button>
+                  <button type="button" className="btn-b" onClick={() => review(true)}>
+                    Analyze game
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="card-b-flat">
