@@ -90,16 +90,16 @@ harmless, one ignored error).
 
 ### Caching (measured from Pune, 2026-10-11)
 
-Requests reach Cloudflare's Mumbai edge (), then Render in Singapore: an API call is
-120–260 ms. Static files are cached so repeat visits skip that trip ():
+Requests reach Cloudflare's Mumbai edge (`colo=BOM`), then Render in Singapore: an API call is
+120–260 ms. Static files are cached so repeat visits skip that trip (`app.module.ts`):
 
 | Path | Cache-Control | Why |
 |---|---|---|
-| , SPA routes () |  | a deploy must show on the next load |
-|  |  | Vite hashes the content into the name |
-|  (5.5 MB Stockfish, brotli) |  | versioned name, not hashed |
+| `/`, SPA routes (`index.html`) | `max-age=0` | a deploy must show on the next load |
+| `/assets/*` | `max-age=31536000, immutable` | Vite hashes the content into the name |
+| `/engine/*` (5.5 MB Stockfish, brotli) | `max-age=604800` | versioned name, not hashed |
 
-Before this, everything was : the 5.5 MB engine was re-fetched from Singapore per game.
+Before this, everything was `max-age=0`: the 5.5 MB engine was re-fetched from Singapore per game.
 
 ### What a restart costs
 
