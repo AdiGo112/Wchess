@@ -1,0 +1,16 @@
+# ZAP baseline rules (ship-plan 1.9). Tab-separated: rule id, action, name.
+# Triaged 2026-10-11 against wchess.onrender.com: 0 FAIL, 0 high. Each IGNORE says why;
+# delete a line to see that rule again.
+#
+# react-hot-toast (goober) injects a <style> tag at runtime; script-src stays strict.
+10055	IGNORE	(CSP: style-src unsafe-inline)
+# Only the Google Fonts stylesheet: its CSS varies per browser, so no fixed hash exists.
+# Upgrade path: self-host the three fonts and drop the third party entirely.
+90003	IGNORE	(Sub Resource Integrity Attribute Missing)
+# COEP only matters for SharedArrayBuffer (multithreaded Stockfish), which we do not use,
+# and require-corp would block Google Fonts.
+90004	IGNORE	(Cross-Origin-Embedder-Policy Header Missing or Invalid)
+# Informational, not findings: "it is a SPA", and caching we set on purpose (deployment.md).
+10109	IGNORE	(Modern Web Application)
+10015	IGNORE	(Re-examine Cache-control Directives)
+10049	IGNORE	(Storable and Cacheable Content)

@@ -20,3 +20,6 @@ temp_*.md
 # Verification screenshots — artifacts of a run, not source
 backend/scripts/*.png
 
+
+# Written by every ZAP run (zap-baseline.py); the rules live in .zap/rules.tsv
+.zap/zap.yaml
