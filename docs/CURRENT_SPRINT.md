@@ -5,6 +5,14 @@
 
 ---
 
+## 🚀 LIVE: https://wchess.onrender.com (2026-10-11)
+First deploy via PRs #12 (dev→staging) + #13 (staging→main). Neon (Singapore) migrated on first boot. cron-job.org
+pings `/health/live` every 10 min. Backup run #1 green (`db-1`, encrypted). Live checks from Pune: health ok, Swagger
+404, private routes 401, http→https 301, HSTS + CSP + nosniff + frame-deny. API 120–260 ms (Cloudflare BOM → Render
+Singapore). PR #14: static asset caching (everything was `max-age=0`) + Actions on Node 24.
+**Still to do:** per-IP throttle test from a second network (`TRUST_PROXY`, Cloudflare is in front), Sentry (1.7),
+ZAP (1.9).
+
 ## Next Up
 **Ship plan** — [`infrastructure/ship-plan.md`](infrastructure/ship-plan.md). Phase 0 done; Phase 1.1–1.5 done. **Host chosen 2026-10-11: Render + Neon** (ADR-0035);
 1.6 + 1.8 done, 1.7 half. **Next: Adi follows `infrastructure/deployment.md` (accounts, Blueprint, pinger, backup
