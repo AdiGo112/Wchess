@@ -21,7 +21,7 @@ npm run dev           # Vite, port 5173
 
 ## Production: Render + Neon (ADR-0035)
 
-```
+```text
              browser ── https ──► Render web service "wchess" (free, Singapore)
                                    one Node process: API + Socket.io + the built SPA
                                    │                     │
