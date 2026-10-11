@@ -343,6 +343,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
 
     const base =
       process.env.FRONTEND_URL ||
+      process.env.RENDER_EXTERNAL_URL || // set by Render: the service's public https URL
       process.env.CORS_ORIGIN ||
       'http://localhost:5173';
     return { token, shareUrl: `${base}/challenge/${token}`, expiresAt };
