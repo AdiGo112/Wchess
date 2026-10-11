@@ -71,8 +71,9 @@ create for free: the database (Neon) and the pinger (cron-job.org). Production d
 
 - `node frontend/scripts/verify-security.mjs` against the live URL (change `API`/`WS` at the
   top). In particular **R**: 10 failed logins from one machine should 429 while your phone,
-  on another network, can still log in. If everyone shares one bucket, the `TRUST_PROXY`
-  hop count is wrong (ship-plan 0.6).
+  on another network, can still log in. **Found broken on the first deploy** and fixed with
+  `CLIENT_IP_HEADER=cf-connecting-ip`: `TRUST_PROXY=1` alone gave Render's rotating proxy IPs.
+  Also send a fake `CF-Connecting-IP` while blocked: still 429 means Cloudflare overwrote it.
 - The refresh cookie shows `Secure` in the browser's dev tools (it's `NODE_ENV=production`).
 - `/api/docs` is a 404 (Swagger is dev-only).
 
@@ -87,6 +88,19 @@ pg_restore --no-owner --no-privileges --clean --if-exists -d "$TARGET_DATABASE_U
 Use a `pg_restore` whose major version matches the **target** server. A newer one emits
 settings an older server rejects (seen locally: `transaction_timeout` from 18 against 16,
 harmless, one ignored error).
+
+### Caching (measured from Pune, 2026-10-11)
+
+Requests reach Cloudflare's Mumbai edge (`colo=BOM`), then Render in Singapore: an API call is
+120–260 ms. Static files are cached so repeat visits skip that trip (`app.module.ts`):
+
+| Path | Cache-Control | Why |
+|---|---|---|
+| `/`, SPA routes (`index.html`) | `max-age=0` | a deploy must show on the next load |
+| `/assets/*` | `max-age=31536000, immutable` | Vite hashes the content into the name |
+| `/engine/*` (5.5 MB Stockfish, brotli) | `max-age=604800` | versioned name, not hashed |
+
+Before this, everything was `max-age=0`: the 5.5 MB engine was re-fetched from Singapore per game.
 
 ### What a restart costs
 
