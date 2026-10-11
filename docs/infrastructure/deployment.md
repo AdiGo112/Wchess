@@ -88,6 +88,19 @@ Use a `pg_restore` whose major version matches the **target** server. A newer on
 settings an older server rejects (seen locally: `transaction_timeout` from 18 against 16,
 harmless, one ignored error).
 
+### Caching (measured from Pune, 2026-10-11)
+
+Requests reach Cloudflare's Mumbai edge (), then Render in Singapore: an API call is
+120–260 ms. Static files are cached so repeat visits skip that trip ():
+
+| Path | Cache-Control | Why |
+|---|---|---|
+| , SPA routes () |  | a deploy must show on the next load |
+|  |  | Vite hashes the content into the name |
+|  (5.5 MB Stockfish, brotli) |  | versioned name, not hashed |
+
+Before this, everything was : the 5.5 MB engine was re-fetched from Singapore per game.
+
 ### What a restart costs
 
 Render's free Key Value keeps nothing across a restart, and every deploy restarts. Live games,
