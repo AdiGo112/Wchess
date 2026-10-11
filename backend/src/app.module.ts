@@ -54,6 +54,8 @@ import { clientIp } from './common/http-security';
         { name: 'long', ttl: 60000, limit: 300 },
       ],
       getTracker: (req) => clientIp(req as Parameters<typeof clientIp>[0]),
+      // Shown as-is by the login/signup forms; the default is "ThrottlerException: Too Many Requests".
+      errorMessage: 'Too many attempts. Please wait a minute and try again.',
     }),
 
     PrismaModule,

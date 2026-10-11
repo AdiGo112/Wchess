@@ -47,6 +47,12 @@ export function applyHttpSecurity(app: NestExpressApplication) {
   app.use((req: Request, res: Response, next: NextFunction) =>
     req.path.startsWith('/api/docs') ? next() : headers(req, res, next),
   );
+  // Helmet doesn't set this one. Switch off powerful features the app never uses, so
+  // injected script couldn't ask for them either (ZAP 10063, ship-plan 1.9).
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    next();
+  });
 
   // Behind a host's proxy every request arrives from the proxy's IP, so all users
   // would share one throttle bucket. TRUST_PROXY = number of proxy hops in front
