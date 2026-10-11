@@ -7,7 +7,9 @@
 //   1  /history rows link into /review/:gameId
 //   2  the review page renders the board and the full move list before any
 //      analysis exists
-//   3  it queues its own analysis (increment 5: opening the review IS the
+//   3  analysis is opt-in: nothing runs until 'Analyze game' is pressed, then it
+//      shows a working state (it used to start on open; changed 2026-10-11). Was:
+//      it queues its own analysis (increment 5: opening the review IS the
 //      request) and shows a working state meanwhile
 //   4  the analysis lands and the page fills in: accuracy for both players,
 //      annotation marks on bad moves, the eval readout
@@ -146,9 +148,12 @@ async function main() {
     MOVES.filter((m) => !beforeText.includes(m)).join(' ') || 'all present');
   check('the ply counter starts at 0', beforeText.includes(`0/${MOVES.length}`));
 
-  // ---- 3. the page queues its own analysis ----
-  check('it reports analysis in progress without being asked',
-    /judging you/i.test(beforeText), beforeText.match(/judging you/i) ? '' : 'no working state shown');
+  // ---- 3. analysis is the user's choice ----
+  check('nothing runs until asked: an Analyze button is offered',
+    !/judging you/i.test(beforeText) && /analyze game/i.test(beforeText));
+  await page.getByRole('button', { name: 'Analyze game' }).click();
+  await page.waitForFunction(() => /judging you|accuracy/i.test(document.body.innerText), null, { timeout: 10000 }).catch(() => {});
+  check('pressing it starts the analysis', /judging you|accuracy/i.test(await body()));
 
   // ---- 4. the analysis lands and fills the page in ----
   await page.waitForFunction(

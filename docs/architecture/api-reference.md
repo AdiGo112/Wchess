@@ -119,7 +119,7 @@ by the global `ValidationPipe` (`whitelist: true`).
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/analysis/:gameId` | ✓ | Queue a depth-18 sweep of a finished game. Returns immediately: `{ status: "running", gameId }`, or the stored row with `status: "done"` if it was already analysed. Errors: 404 game not found / no moves, 503 over 300 plies or the queue is full, 429 if the caller already has a sweep running or has started 5 fresh sweeps in the last hour (reading an already-analysed game is free) |
-| GET | `/analysis/:gameId` | — | `{ status: "done" | "running" | "none", ... }`. When done, the full row: `depth`, `engine`, `accuracyWhite`, `accuracyBlack`, `moves[]`, `createdAt` |
+| GET | `/analysis/:gameId` | — | `{ status: "done" | "running" | "none", ... }`. When done, the full row: `depth`, `engine`, `accuracyWhite`, `accuracyBlack`, `moves[]`, `createdAt`. The review page only reads this on open; it POSTs when the user presses Analyze, or arrives with `?analyze=1`. |
 
 POST is authed because it is the only route on this server that costs real CPU;
 GET is public, like `GET /games/:id`. Poll GET after POST — a sweep of a full

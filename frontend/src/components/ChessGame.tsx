@@ -9,6 +9,7 @@ import useStockfish from "../hooks/useStockfish";
 import useBoardFit from "../hooks/useBoardFit";
 import useMoveInput, { type PromotionPiece } from "../hooks/useMoveInput";
 import PromotionPicker from "./PromotionPicker";
+import type { LocalReviewState } from "../pages/GameReview";
 import { playMoveSound, playSound } from "../lib/sound";
 import type {
   Color,
@@ -600,12 +601,31 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
                   Accept rematch
                 </button>
               )}
-              {/* Only rated games are persisted, so only they have something to
-                  review — vs-computer rooms never produce a Game row. */}
-              {gameOver.gameId && (
-                <Link to={`/review/${gameOver.gameId}`} className="btn-b">
-                  Review
-                </Link>
+              {/* Review = step through the moves; Analyze = the engine too. Rated
+                  games are saved, so they review by id (server analysis);
+                  vs-computer rooms never produce a Game row, so their moves go
+                  over in router state and the engine runs in the browser. */}
+              {gameOver.gameId ? (
+                <>
+                  <Link to={`/review/${gameOver.gameId}`} className="btn-b">Review</Link>
+                  <Link to={`/review/${gameOver.gameId}?analyze=1`} className="btn-b">Analyze</Link>
+                </>
+              ) : moveHistory.length > 0 && (
+                ([false, true] as const).map((analyze) => (
+                  <Link
+                    key={String(analyze)}
+                    to="/review/local"
+                    state={{
+                      moves: moveHistory,
+                      white: players.white?.username ?? "White",
+                      black: players.black?.username ?? "Black",
+                      analyze,
+                    } satisfies LocalReviewState}
+                    className="btn-b"
+                  >
+                    {analyze ? "Analyze" : "Review"}
+                  </Link>
+                ))
               )}
               <button onClick={() => navigate("/")} className="btn-b">
                 Home
