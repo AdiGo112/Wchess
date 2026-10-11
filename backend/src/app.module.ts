@@ -15,6 +15,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { loggerModule } from './common/logging';
 import { HealthController } from './health.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { clientIp } from './common/http-security';
 
 @Module({
   imports: [
@@ -31,13 +32,29 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist'),
       // Express 5 / path-to-regexp v8 syntax (NestJS 11): named wildcards, no regex groups.
       exclude: ['/api/{*path}', '/socket.io/{*path}'],
+      // index.html keeps the default max-age=0, so a deploy is picked up on the next load.
+      serveStaticOptions: {
+        setHeaders: (res, path) => {
+          // Vite puts a content hash in every /assets file name: a changed file is a new URL,
+          // so the old one can be cached forever, by the browser and Cloudflare's edge.
+          if (/[\\/]assets[\\/]/.test(path)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else if (/[\\/]engine[\\/]/.test(path)) {
+            // Engine names carry the Stockfish version, not a content hash: a week, then revalidate.
+            res.setHeader('Cache-Control', 'public, max-age=604800');
+          }
+        },
+      },
     }),
 
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },
-      { name: 'medium', ttl: 10000, limit: 50 },
-      { name: 'long', ttl: 60000, limit: 300 },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        { name: 'short', ttl: 1000, limit: 10 },
+        { name: 'medium', ttl: 10000, limit: 50 },
+        { name: 'long', ttl: 60000, limit: 300 },
+      ],
+      getTracker: (req) => clientIp(req as Parameters<typeof clientIp>[0]),
+    }),
 
     PrismaModule,
     RedisModule,
