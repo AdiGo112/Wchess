@@ -31,6 +31,19 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist'),
       // Express 5 / path-to-regexp v8 syntax (NestJS 11): named wildcards, no regex groups.
       exclude: ['/api/{*path}', '/socket.io/{*path}'],
+      // index.html keeps the default max-age=0, so a deploy is picked up on the next load.
+      serveStaticOptions: {
+        setHeaders: (res, path) => {
+          // Vite puts a content hash in every /assets file name: a changed file is a new URL,
+          // so the old one can be cached forever, by the browser and Cloudflare's edge.
+          if (/[\\/]assets[\\/]/.test(path)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else if (/[\\/]engine[\\/]/.test(path)) {
+            // Engine names carry the Stockfish version, not a content hash: a week, then revalidate.
+            res.setHeader('Cache-Control', 'public, max-age=604800');
+          }
+        },
+      },
     }),
 
     ThrottlerModule.forRoot([
