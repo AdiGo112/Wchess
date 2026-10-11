@@ -22,7 +22,8 @@ A route added without thinking about auth is private.
 
 | Method | Path | Auth | Response |
 |---|---|---|---|
-| GET | `/health` | none, never throttled | `200 { status: 'ok', db: 'ok', redis: 'ok' }`, or `503` with the failing one marked `down` |
+| GET | `/health` | none, never throttled | **Readiness.** `200 { status: 'ok', db: 'ok', redis: 'ok' }`, or `503` with the failing one marked `down` |
+| GET | `/health/live` | none, never throttled | **Liveness.** `200 { status: 'ok' }`, touches nothing. For Render's health check and the keep-awake pinger, so they don't keep Neon awake (ADR-0035) |
 
 ## Limits (ship-plan Phase 0)
 

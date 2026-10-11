@@ -1,8 +1,8 @@
 # Ship Plan: security hardening → free-tier launch
 
-> Written 2026-10-09. Goal: ship **fast** on **free tiers**. The host is not chosen yet
-> (Adi decides when and how). Every phase below works on any host; the decisions that
-> depend on the host are marked **[host]**.
+> Written 2026-10-09. Goal: ship **fast** on **free tiers**. **Host chosen 2026-10-11: Render +
+> Neon + Render Key Value** ([ADR-0035](../architecture/ADR-0035-free-tier-hosting-render-neon.md),
+> setup in [`deployment.md`](./deployment.md)). Items marked **[host]** were written before that.
 >
 > Source checklist: OWASP Top 10:2025, the OWASP WebSocket cheat sheet, the Prisma raw-query
 > docs. The audit of this repo against that checklist is in the table at the bottom.
@@ -59,9 +59,9 @@ few lines.
 | 1.3 | ✅ **Done 2026-10-10:** one leak found: `GET /users/:username` stripped only `passwordHash`/`email`, so it served `oauthId`, `role`, `isBanned`, `emailVerified`, `lastSeenAt` to anyone. Now an allowlist `select`. Rest clean: `PATCH /users/me` uses the token's id; challenge accept rejects your own; game rows hold no private data. `verify-security` I1. **Insecure direct object reference (IDOR) pass** | For every `:id` route, check that a stranger's id can't read or change another user's data. Add one check per route to a verify script. |
 | 1.4 | ✅ **Done 2026-10-10:** in `AnalysisService`: 1 running sweep per user, 5 fresh sweeps per user per hour, both 429; cached results don't count. In memory (one instance, ADR-0032). `analysis.service.spec.ts`. **Analysis throttle** | Stockfish runs on the server's CPU, which is scarce on a free tier. Limit to 1 running sweep per user and a few per hour. |
 | 1.5 | ✅ **Done 2026-10-10:** `enableShutdownHooks()`. Stack traces were already never sent: Nest's default filter answers unknown errors with a bare `500 Internal server error`. `NODE_ENV=production` is **[host]**. **Production errors** | `NODE_ENV=production`, no stack traces in responses, `app.enableShutdownHooks()` so a free-tier restart closes Redis/Prisma cleanly. |
-| 1.6 | **Database and Redis over TLS** **[host]** | Managed free tiers (e.g. Neon, Upstash) require it anyway: `?sslmode=require` and `rediss://`. Never expose either to the open internet. |
-| 1.7 | **Error tracking + uptime** | Sentry's free plan for backend and frontend; a free uptime pinger on `/health`. Many free web tiers sleep when idle, and the pinger also keeps it awake (check the host's terms) **[host]**. |
-| 1.8 | **Backups** **[host]** | Check whether the free Postgres tier includes point-in-time restore or daily backups. If it doesn't, add a nightly `pg_dump` GitHub Action. **Test one restore.** |
+| 1.6 | ✅ **Decided 2026-10-11:** Neon is TLS-only (`sslmode=require`). Redis is plain `redis://` but on Render's **private network** with `ipAllowList: []`, so it has no internet path at all; that replaces the `rediss://` requirement. **Database and Redis over TLS** **[host]** | Managed free tiers (e.g. Neon, Upstash) require it anyway: `?sslmode=require` and `rediss://`. Never expose either to the open internet. |
+| 1.7 | **Half done 2026-10-11:** `/health/live` (no DB) for Render's health check and the cron-job.org pinger; `/health` stays the readiness check. Sentry still to do. **Error tracking + uptime** | Sentry's free plan for backend and frontend; a free uptime pinger on `/health`. Many free web tiers sleep when idle, and the pinger also keeps it awake (check the host's terms) **[host]**. |
+| 1.8 | ✅ **Done 2026-10-11:** `.github/workflows/backup.yml`, nightly `pg_dump` → AES-256 (public repo, public artifacts) → 30 days. Restore tested locally: User/Game/GameAnalysis/migrations row counts identical. Live once Adi adds the two secrets. **Backups** **[host]** | Check whether the free Postgres tier includes point-in-time restore or daily backups. If it doesn't, add a nightly `pg_dump` GitHub Action. **Test one restore.** |
 | 1.9 | **ZAP baseline scan** against the staging URL | Free and automated (`zaproxy/action-baseline`). Fix the highs. |
 
 ---
@@ -77,6 +77,10 @@ few lines.
 ---
 
 ## Free-tier risks to check before choosing a host [host]
+
+> **Resolved by ADR-0035** (2026-10-11). Kept for the reasoning; two points are out of date:
+> the clock sweeper no longer polls (ADR-0034), and idle Redis traffic measured 14 commands/min
+> after the NestJS 11 upgrade, which Render Key Value (no command quota) absorbs.
 
 - **Sleeping instances.** Free web services often spin down when idle. A sleeping server
   drops every live socket, and the first visitor waits for a cold start. Clocks survive
