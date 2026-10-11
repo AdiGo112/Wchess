@@ -7,6 +7,8 @@ import { useSocket } from "../context/SocketContext";
 import { useAuth } from "../context/AuthContext";
 import useStockfish from "../hooks/useStockfish";
 import useBoardFit from "../hooks/useBoardFit";
+import useMoveInput, { type PromotionPiece } from "../hooks/useMoveInput";
+import PromotionPicker from "./PromotionPicker";
 import { playMoveSound, playSound } from "../lib/sound";
 import type {
   Color,
@@ -305,8 +307,8 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
      and only lands once the server round trip completes. `move_made` overwrites
      fen wholesale with the authoritative position, so this self-reconciles; the
      server remains the only authority and `invalid_move` is the revert path. */
-  const onDrop = useCallback(
-    (sourceSquare: string, targetSquare: string) => {
+  const playMove = useCallback(
+    (sourceSquare: string, targetSquare: string, promotion?: PromotionPiece) => {
       if (!socket || !roomId || gameOver || isSpectator) return false;
 
       const chess = new Chess(fen === "start" ? undefined : fen);
@@ -314,12 +316,6 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
         (chess.turn() === "w" && orientation === "white") ||
         (chess.turn() === "b" && orientation === "black");
       if (!isMyTurn) return false;
-
-      // ponytail: auto-queen. A promotion picker is real UI work; every other
-      // promotion is rare enough that queen is the right default. Until this
-      // existed the client sent no `promotion` at all, so the server's chess.js
-      // rejected every promoting move as illegal.
-      const promotion = "q";
 
       let applied;
       try {
@@ -372,6 +368,13 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
     }
     return styles;
   }, [lastMove, fen]);
+
+  // Drag or click to move; promotions open the picker (useMoveInput).
+  const input = useMoveInput({
+    fen,
+    myColor: gameOver || isSpectator ? null : orientation === "white" ? "w" : "b",
+    onMove: playMove,
+  });
 
   const handleResign = () => {
     if (socket && roomId && !gameOver) socket.emit("resign", { roomId });
@@ -429,19 +432,21 @@ export default function ChessGame({ roomId, timeControl }: ChessGameProps) {
       }`}
     >
       {/* Board — left, as large as the frame allows */}
-      <div className="shrink-0 flex items-center" style={{ width: fit.size }}>
+      <div className="shrink-0 flex items-center relative" style={{ width: fit.size }}>
         <Chessboard
           position={fen}
           boardWidth={fit.size}
-          onPieceDrop={onDrop}
+          onPieceDrop={input.onPieceDrop}
+          onSquareClick={input.onSquareClick}
           boardOrientation={orientation}
           isDraggablePiece={isDraggablePiece}
           customLightSquareStyle={{ backgroundColor: LIGHT_SQ }}
           customDarkSquareStyle={{ backgroundColor: DARK_SQ }}
           customBoardStyle={BOARD_STYLE}
-          customSquareStyles={squareStyles}
+          customSquareStyles={{ ...squareStyles, ...input.selectionStyles }}
           customDropSquareStyle={{ boxShadow: "inset 0 0 0 4px #ffffff" }}
         />
+        <PromotionPicker pending={input.pending} onChoose={input.choosePromotion} />
       </div>
 
       {/* Everything else, to the right of the board. Opponent on top and you

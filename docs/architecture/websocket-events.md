@@ -29,7 +29,7 @@ Unauthenticated connections are rejected immediately.
 | Event | Payload | Description |
 |---|---|---|
 | `join_room` | `{ roomId: string }` | Join a room. **Players** get `game_start` (and flip a `waiting` room to `active`, starting white's clock) or `game_state` on reconnect. **Non-players** get a one-shot `game_state` snapshot and nothing else — they cannot start the clock or arm the abandonment timer. |
-| `move` | `{ roomId, from, to, promotion? }` | Make a move. Always send `promotion` (the client sends `"q"`); without it the server's chess.js rejects every promoting move as illegal. |
+| `move` | `{ roomId, from, to, promotion? }` | Make a move. `promotion` (`q`/`r`/`b`/`n`) is required on a promoting move and comes from the player's pick in the promotion picker; the client omits it otherwise. Without it chess.js rejects a promoting move as illegal. |
 | `computer_move` | `{ roomId, from, to, promotion? }` | Relay the move chosen by Stockfish WASM running in the player's own browser (ADR-0009). Accepted **only** when: the room's black player is `computer`, the sender is that room's white (human) player, it is black's turn, and chess.js rules the move legal. Silently ignored otherwise. |
 | `resign` | `{ roomId }` | Resign the game |
 | `offer_draw` | `{ roomId }` | Offer a draw |
