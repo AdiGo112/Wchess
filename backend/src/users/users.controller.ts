@@ -1,7 +1,7 @@
-import { Controller, Get, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Param, Query, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/jwt-auth.guard';
 import { IsString, IsOptional, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
@@ -16,6 +16,7 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   // Declared before ':username' so the literal path wins the route match.
+  @Public()
   @Get()
   list(
     @Query('page') page = '1',
@@ -25,18 +26,19 @@ export class UsersController {
     return this.usersService.listUsers(+page, +limit, search);
   }
 
+  @Public()
   @Get(':username')
   getProfile(@Param('username') username: string) {
     return this.usersService.getPublicProfile(username);
   }
 
+  @Public()
   @Get(':username/stats')
   getStats(@Param('username') username: string) {
     return this.usersService.getStats(username);
   }
 
   @Patch('me')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   updateProfile(@Request() req: any, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(req.user.id, dto);

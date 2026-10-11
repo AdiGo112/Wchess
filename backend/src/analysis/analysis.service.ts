@@ -1,4 +1,6 @@
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,6 +22,9 @@ const MAX_PLIES = 300;
 const MAX_QUEUED = 3;
 /** A wedged engine must fail its own sweep, not deadlock every later one. */
 const REPLY_TIMEOUT_MS = MOVETIME_MS + 30_000;
+/** Fresh sweeps one user may start per hour; reading a stored analysis is free (ship-plan 1.4). */
+const SWEEPS_PER_USER_HOUR = 5;
+const HOUR_MS = 3_600_000;
 
 interface Pending {
   resolve: (reply: { score: Score; bestMove: string | null }) => void;
@@ -39,8 +44,11 @@ export class AnalysisService implements OnModuleDestroy {
   /** Latest score seen for the position being searched, side-to-move's view. */
   private score: Score = { cp: null, mate: null };
 
-  /** gameId -> the sweep currently queued or running for it. */
-  private readonly inFlight = new Map<string, Promise<unknown>>();
+  /** gameId -> the user whose sweep is currently queued or running for it. */
+  private readonly inFlight = new Map<string, string>();
+  // ponytail: in-memory, fine on one instance (ADR-0032); move to Redis if the API scales out.
+  /** userId -> start times of that user's sweeps in the last hour. */
+  private readonly sweepsByUser = new Map<string, number[]>();
   /** One engine, so sweeps run one after another rather than interleaved. */
   private chain: Promise<unknown> = Promise.resolve();
 
@@ -56,7 +64,7 @@ export class AnalysisService implements OnModuleDestroy {
    * Kick off analysis and return immediately - a depth-18 sweep takes tens of
    * seconds, well past any sane HTTP timeout, so the client polls `get()`.
    */
-  async request(gameId: string) {
+  async request(gameId: string, userId: string) {
     const existing = await this.prisma.gameAnalysis.findUnique({ where: { gameId } });
     if (existing) return { status: 'done' as const, ...existing };
 
@@ -68,6 +76,15 @@ export class AnalysisService implements OnModuleDestroy {
     if (game.moves.length > MAX_PLIES) {
       throw new ServiceUnavailableException(`Games over ${MAX_PLIES} plies are not analysed`);
     }
+    // Per-user limits, so one account can't keep the single engine busy for everyone.
+    if ([...this.inFlight.values()].includes(userId)) {
+      throw new HttpException('You already have an analysis running', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const now = Date.now();
+    const recent = (this.sweepsByUser.get(userId) ?? []).filter((t) => now - t < HOUR_MS);
+    if (recent.length >= SWEEPS_PER_USER_HOUR) {
+      throw new HttpException('Analysis limit reached, try again later', HttpStatus.TOO_MANY_REQUESTS);
+    }
     if (this.inFlight.size >= MAX_QUEUED) {
       throw new ServiceUnavailableException('Analysis queue is full, try again shortly');
     }
@@ -78,7 +95,8 @@ export class AnalysisService implements OnModuleDestroy {
       .catch(() => undefined)
       .then(() => this.sweep(gameId, game.moves)));
 
-    this.inFlight.set(gameId, run);
+    this.inFlight.set(gameId, userId);
+    this.sweepsByUser.set(userId, [...recent, now]);
     run
       .catch((err) => this.logger.error(`Analysis failed for ${gameId}: ${err.message}`))
       .finally(() => this.inFlight.delete(gameId));

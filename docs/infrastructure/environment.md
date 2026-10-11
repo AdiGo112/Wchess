@@ -29,7 +29,7 @@ NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 
 # Host used to build friend-challenge share links.
-# Falls back to CORS_ORIGIN, then http://localhost:5173.
+# Falls back to RENDER_EXTERNAL_URL (Render sets it), then CORS_ORIGIN, then http://localhost:5173.
 FRONTEND_URL=http://localhost:5173
 ```
 
@@ -67,7 +67,7 @@ VITE_SERVER_URL=http://localhost:3100
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string. Read by Prisma from the schema — never through `process.env` in app code. |
 | `REDIS_URL` | Yes | Redis connection URL. |
-| `JWT_SECRET` | Yes | HS256 signing secret — min 64 chars in production. |
+| `JWT_SECRET` | Yes | HS256 signing secret: at least 256 random bits in production. Locally `openssl rand -hex 64`; on Render `render.yaml` has it generated (`generateValue`), so it never exists outside Render. |
 | `JWT_EXPIRES_IN` | No (default `15m`) | Access token TTL. |
 | `REFRESH_TOKEN_EXPIRES_DAYS` | No (default `30`) | Refresh token lifetime in days. |
 | `PORT` | No (default `3100`) | API server port. |
@@ -76,7 +76,7 @@ VITE_SERVER_URL=http://localhost:3100
 | `TRUST_PROXY` | No (default off) | Number of proxy hops in front of the app. **Set `1` on any host with a load balancer**, or every user shares the proxy's IP for rate limiting. Leave unset with no proxy, or clients can spoof their IP. |
 | `LOG_LEVEL` | No (default `debug` in dev, `info` in prod) | Pino level: `debug` adds one line per move. |
 | `CORS_ORIGIN` | No (default `http://localhost:5173`) | Allowed browser origin(s). `*` = reflect any origin (demo/tunnel only); comma-separated = allow-list. Parsed by `common/utils/cors.ts`, applied to REST in `main.ts` and to both socket gateways. |
-| `FRONTEND_URL` | No | Origin used to build friend-challenge share links. Falls back to `CORS_ORIGIN`, then `http://localhost:5173`. |
+| `FRONTEND_URL` | No | Origin used to build friend-challenge share links. Falls back to `RENDER_EXTERNAL_URL` (set automatically by Render), then `CORS_ORIGIN`, then `http://localhost:5173`. Leave unset on Render. |
 | `VITE_SERVER_URL` | No (frontend) | Absolute backend origin. **Unset = same-origin**: the frontend calls `/api/v1` and `/socket.io` on its own origin, which the Vite dev proxy (or a prod reverse proxy) forwards. Set it only to bypass the proxy. |
 | `VITE_PROXY_TARGET` | No (frontend, dev only) | Where `vite.config.js` points its `/api` + `/socket.io` proxy. Defaults to `http://localhost:3100`. Build-time only — it never reaches the browser. |
 

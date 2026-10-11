@@ -21,9 +21,9 @@ export interface User {
   recentGames?: { opponent: string; result: string; date: string }[];
 }
 
+/** The refresh token never reaches JS: it travels in an HttpOnly cookie. */
 export interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
   user: User;
 }
 

@@ -3,7 +3,9 @@
 Base URL: `http://localhost:3100/api/v1`
 Swagger UI: `http://localhost:3100/api/docs`
 
-All protected routes require: `Authorization: Bearer <accessToken>`
+**Deny by default** (ship-plan 1.2): every route needs `Authorization: Bearer <accessToken>`
+unless it is marked `@Public()`. In the tables below, `—` means public and `✓` means a token is required.
+A route added without thinking about auth is private.
 
 > **Scope.** This file documents the endpoints that exist in `backend/src` today.
 > Chat, notifications, puzzles, tournaments, social and media were cut from v1 by
@@ -20,7 +22,8 @@ All protected routes require: `Authorization: Bearer <accessToken>`
 
 | Method | Path | Auth | Response |
 |---|---|---|---|
-| GET | `/health` | none, never throttled | `200 { status: 'ok', db: 'ok', redis: 'ok' }`, or `503` with the failing one marked `down` |
+| GET | `/health` | none, never throttled | **Readiness.** `200 { status: 'ok', db: 'ok', redis: 'ok' }`, or `503` with the failing one marked `down` |
+| GET | `/health/live` | none, never throttled | **Liveness.** `200 { status: 'ok' }`, touches nothing. For Render's health check and the keep-awake pinger, so they don't keep Neon awake (ADR-0035) |
 
 ## Limits (ship-plan Phase 0)
 
@@ -34,14 +37,22 @@ All protected routes require: `Authorization: Bearer <accessToken>`
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
 | POST | `/auth/register` | — | `{ username, email, password, name }` | `{ user }` |
-| POST | `/auth/login` | — | `{ username, password }` | `{ accessToken, refreshToken, user }` |
-| POST | `/auth/refresh` | — | `{ refreshToken }` | `{ accessToken, refreshToken }` |
-| POST | `/auth/logout` | — | `{ refreshToken }` | `204` |
+| POST | `/auth/login` | — | `{ username, password }` | `{ accessToken, user }` + sets the `rt` cookie |
+| POST | `/auth/refresh` | — | none (reads the `rt` cookie) | `200 { accessToken }` + rotates the cookie; `204` if there is no cookie; `401` (and the cookie cleared) if it is dead |
+| POST | `/auth/logout` | — | none (reads the `rt` cookie) | `204`, cookie cleared |
 | GET | `/auth/me` | ✓ | — | `UserDto` |
 
-`/auth/logout` is deliberately unguarded: it is idempotent and identifies the
-session by the refresh token in the body, so an expired access token can still
-log you out.
+**The refresh token never appears in a body** (ship-plan 1.1). It lives in a cookie named `rt`:
+`HttpOnly` (no script can read it), `SameSite=Strict` (no other site can make the browser send it),
+`Path=/api/v1/auth` (no other route sees it), `Secure` when `NODE_ENV=production`, `Max-Age` =
+`REFRESH_TOKEN_EXPIRES_DAYS`. This relies on the one-origin setup; a cross-origin `VITE_SERVER_URL`
+needs `CORS_ORIGIN` set to that origin (axios already sends `withCredentials`).
+
+A cookieless refresh is a `204`, not a `401`, because the SPA asks on every page load and a logged-out
+visitor is not an error. `/auth/logout` is public so an expired access token can still log you out.
+
+**Known limit:** the cookie is shared by every tab. Two tabs refreshing in the same instant both send
+the same token; rotation lets one win and the other gets a `401` and shows logged-out until it reloads.
 
 **`UserDto`** — identity only: `{ id, username, email, name, role, avatarUrl, createdAt }`.
 It carries no ratings or W/L; use `/users/:username/stats` for those.
@@ -57,7 +68,7 @@ owner's next login and on logout — there is no scheduled job.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/users` | — | Player directory `?page=1&limit=25&search=` → `{ players, total, page, limit }`. Each row is `{ id, username, name, createdAt, rating }`, where `rating` is the player's highest across variants (`null` if never rated). `limit` is capped at 50. |
-| GET | `/users/:username` | — | Public profile (never returns `passwordHash` or `email`) |
+| GET | `/users/:username` | — | Public profile, an allowlist: `{ id, username, name, avatarUrl, bio, country, createdAt, ratings[] }` |
 | GET | `/users/:username/stats` | — | `{ userId, username, ratings[], totalGames }`. Each `ratings[]` row is one variant: `{ variant, rating, ratingDeviation, wins, losses, draws, provisional }` |
 | PATCH | `/users/me` | ✓ | Update own profile `{ name?, bio?, country? }` (max 50 / 300 / 2 chars) |
 
@@ -107,7 +118,7 @@ by the global `ValidationPipe` (`whitelist: true`).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/analysis/:gameId` | ✓ | Queue a depth-18 sweep of a finished game. Returns immediately: `{ status: "running", gameId }`, or the stored row with `status: "done"` if it was already analysed. Errors: 404 game not found / no moves, 503 over 300 plies or the queue is full |
+| POST | `/analysis/:gameId` | ✓ | Queue a depth-18 sweep of a finished game. Returns immediately: `{ status: "running", gameId }`, or the stored row with `status: "done"` if it was already analysed. Errors: 404 game not found / no moves, 503 over 300 plies or the queue is full, 429 if the caller already has a sweep running or has started 5 fresh sweeps in the last hour (reading an already-analysed game is free) |
 | GET | `/analysis/:gameId` | — | `{ status: "done" | "running" | "none", ... }`. When done, the full row: `depth`, `engine`, `accuracyWhite`, `accuracyBlack`, `moves[]`, `createdAt` |
 
 POST is authed because it is the only route on this server that costs real CPU;

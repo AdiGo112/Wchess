@@ -46,13 +46,23 @@ export class UsersService {
   }
 
   async getPublicProfile(username: string) {
+    // Allowlist, not a denylist: a strip-the-secrets spread leaked every column
+    // added later (oauthId, role, isBanned, lastSeenAt...) to anyone (ship-plan 1.3).
     const user = await this.prisma.user.findUnique({
       where: { username },
-      include: { ratings: true },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        avatarUrl: true,
+        bio: true,
+        country: true,
+        createdAt: true,
+        ratings: true,
+      },
     });
     if (!user) throw new NotFoundException('User not found');
-    const { passwordHash, email, ...safe } = user;
-    return safe;
+    return user;
   }
 
   async getStats(username: string) {

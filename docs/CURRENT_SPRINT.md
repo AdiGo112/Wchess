@@ -6,14 +6,23 @@
 ---
 
 ## Next Up
-**Ship plan** — [`infrastructure/ship-plan.md`](infrastructure/ship-plan.md). Phase 0 (12 blockers) goes on
-`chore/security-hardening` off `dev`. The host is not chosen yet (Adi decides); the plan assumes one origin
-(backend serves the SPA) so the refresh-token cookie stays first-party.
+**Ship plan** — [`infrastructure/ship-plan.md`](infrastructure/ship-plan.md). Phase 0 done; Phase 1.1–1.5 done. **Host chosen 2026-10-11: Render + Neon** (ADR-0035);
+1.6 + 1.8 done, 1.7 half. **Next: Adi follows `infrastructure/deployment.md` (accounts, Blueprint, pinger, backup
+secrets), then verify against the live URL, Sentry (1.7), ZAP (1.9).** After launch: the multi-instance scaling lab
+(deployment.md, "Scaling").
 
 **Performance benchmark** — [`architecture/performance-plan.md`](architecture/performance-plan.md) + ADR-0033
 (proposed). Phase 0 is a benchmark harness; nothing gets optimised before it can measure.
 
 ## Active Branch
+`chore/render-deploy` — cut from `dev` on 2026-10-11. Render + Neon deploy setup (ADR-0035): `render.yaml` Blueprint (web + Key Value with `noeviction`, private only), `/health/live` liveness route, challenge links fall back to `RENDER_EXTERNAL_URL`, nightly encrypted `pg_dump` (`backup.yml`, restore tested), `deployment.md` rewritten as the click-through guide. Not deployed yet: needs Adi's accounts.
+
+`chore/phase1-hardening` — cut from `dev` on 2026-10-10. Phase 1 (1.1–1.5) on `chore/phase1-hardening`: refresh token in an HttpOnly `rt` cookie, deny-by-default JWT guard with `@Public()`, public-profile leak fixed (allowlist), per-user analysis limits, shutdown hooks. 110 Jest; verify security 20/20, pages 18/18, review-ui 23/23, analysis 14/14, clocks 11/11, hardening 22/22, leaderboard 16/16, spectate 9/9, join-authz 2/2.
+**Gotchas:** a cookieless `/auth/refresh` must not be a 401 (every anonymous page load logs a console error,
+which `verify-pages` catches), so it is a `204`. Known limit: two tabs refreshing in the same instant share one
+cookie; one gets a 401 and shows logged-out until reload. Run browser verify scripts from the repo root and they
+write screenshots to `./scripts/` (untracked, delete it).
+
 `chore/nest-11` — cut from `dev` on 2026-10-10. Ship-plan 0.1 finished: NestJS 10 → 11 (Express 5) clears every
 high audit finding; both CI audit gates now at `high`. **Express 5 gotchas hit (all fixed):**
 - route wildcards need names: `ServeStaticModule` exclude `/api/(.*)` → `/api/{*path}` (the old form 500'd every

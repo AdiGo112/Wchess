@@ -21,7 +21,7 @@ cd backend && npx prisma migrate dev        # run migrations
 There is no seed script — `backend/package.json` has no `prisma.seed` entry and
 no `prisma/seed.ts` exists. Register users through the app or a verify script.
 
-**Latest (2026-10-10):** NestJS 11 on `chore/nest-11`; ship-plan Phase 0 complete. Before that: Phase 0 security hardening. Multi-user verify scripts need `AUTH_RATE_LIMIT=1000` on the backend; `verify-security.mjs` needs the default. Before that: Pino logging on `chore/security-hardening` — run the backend and the terminal tells the story of every game (`docs/infrastructure/logging.md`). Before that: ADR-0034 event-driven clock sweeper on `feature/lean-realtime` — benchmark with `cd frontend && node scripts/bench-live.mjs <label>` (needs zero live games). Before that: lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
+**Latest (2026-10-11):** host chosen, Render + Neon (ADR-0035); deploy steps in `docs/infrastructure/deployment.md`, config in `render.yaml`. Before that (2026-10-10): ship-plan Phase 1 (1.1–1.5) on `chore/phase1-hardening` — the refresh token is now an HttpOnly cookie (nothing in `sessionStorage`), every route is private unless `@Public()`. Before that: NestJS 11 on `chore/nest-11`; ship-plan Phase 0 complete. Before that: Phase 0 security hardening. Multi-user verify scripts need `AUTH_RATE_LIMIT=1000` on the backend; `verify-security.mjs` needs the default. Before that: Pino logging on `chore/security-hardening` — run the backend and the terminal tells the story of every game (`docs/infrastructure/logging.md`). Before that: ADR-0034 event-driven clock sweeper on `feature/lean-realtime` — benchmark with `cd frontend && node scripts/bench-live.mjs <label>` (needs zero live games). Before that: lint + Vitest on `chore/lint-and-frontend-tests` (`cd backend && npm run lint`, `cd frontend && npm test`). Before that: backend unit tests 20 → 91 on `feature/backend-tests` (`cd backend && npm test`).
 
 **Earlier (2026-09-25):** spectate shipped on `feature/spectate` — Lobby → *Watch live*. Verify with
 `node frontend/scripts/verify-spectate.mjs` against a running backend (9 checks).
@@ -83,7 +83,7 @@ ts-migration branch — the `.jsx` paths older revisions listed no longer exist.
 
 | Area | Location | Working? | Gap |
 |---|---|---|---|
-| AuthContext | `frontend/src/context/AuthContext.tsx` | ✅ | Token in memory (useRef), refreshToken in sessionStorage, silent restore |
+| AuthContext | `frontend/src/context/AuthContext.tsx` | ✅ | Access token in memory (useRef); refresh token in an HttpOnly cookie JS never sees; silent restore asks `/auth/refresh` on every boot |
 | SocketContext | `frontend/src/context/SocketContext.tsx` | ✅ | Refreshes the token on `connect_error`; surfaces gateway `error` events and `reconnect_failed` as toasts |
 | Login / Signup pages | `frontend/src/pages/` | ✅ | Signup has confirmPassword + field-level 409 errors; Login has `from` redirect |
 | ChessGame component | `frontend/src/components/ChessGame.tsx` | ✅ | Optimistic moves, auto-queen promotion, re-joins the room on reconnect, colour lock, draw split UI, rematch flow. Board fills the frame on the left, clocks/moves/controls in a column to its right; the page does not scroll. |

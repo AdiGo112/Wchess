@@ -21,7 +21,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const REFRESH_KEY = "chessweb_refresh_token";
+/** Where the refresh token used to live, before it moved into an HttpOnly cookie. */
+const LEGACY_REFRESH_KEY = "chessweb_refresh_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -29,25 +30,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const accessTokenRef = useRef<string | null>(null);
   const bootedRef = useRef(false);
 
-  const storeTokens = (accessToken: string, refreshToken: string) => {
-    accessTokenRef.current = accessToken;
-    sessionStorage.setItem(REFRESH_KEY, refreshToken);
-  };
-
+  // The access token lives only in memory; the refresh token is an HttpOnly
+  // cookie the server sets and clears, so there is nothing else to store.
   const clearTokens = () => {
     accessTokenRef.current = null;
-    sessionStorage.removeItem(REFRESH_KEY);
   };
 
   const getToken = useCallback(() => accessTokenRef.current, []);
 
   const refreshToken = useCallback(async (): Promise<string | null> => {
-    const stored = sessionStorage.getItem(REFRESH_KEY);
-    if (!stored) return null;
     try {
-      const res = await api.post<AuthResponse>("/auth/refresh", { refreshToken: stored });
-      storeTokens(res.data.accessToken, res.data.refreshToken);
-      return res.data.accessToken;
+      // 204 with no body = no session cookie, i.e. simply logged out.
+      const res = await api.post<{ accessToken: string } | "">("/auth/refresh");
+      const token = res.data ? res.data.accessToken : null;
+      if (!token) {
+        clearTokens();
+        setUser(null);
+        return null;
+      }
+      accessTokenRef.current = token;
+      return token;
     } catch {
       clearTokens();
       setUser(null);
@@ -56,9 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    const stored = sessionStorage.getItem(REFRESH_KEY);
     try {
-      if (stored) await api.post("/auth/logout", { refreshToken: stored });
+      await api.post("/auth/logout");
     } catch {
       // clear locally regardless
     }
@@ -75,12 +76,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     });
 
-    const stored = sessionStorage.getItem(REFRESH_KEY);
-    if (!stored) {
-      setIsLoading(false);
-      return;
+    try {
+      sessionStorage.removeItem(LEGACY_REFRESH_KEY); // a pre-cookie token left readable by scripts
+    } catch {
+      // storage blocked: nothing to clean up
     }
 
+    // Only the server can see whether the cookie exists, so every boot asks.
     refreshToken()
       .then((token) => {
         if (!token) {
@@ -99,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     const res = await api.post<AuthResponse>("/auth/login", { username, password });
-    storeTokens(res.data.accessToken, res.data.refreshToken);
+    accessTokenRef.current = res.data.accessToken;
     setUser(res.data.user);
     return res.data;
   };
