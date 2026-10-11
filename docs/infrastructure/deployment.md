@@ -71,8 +71,9 @@ create for free: the database (Neon) and the pinger (cron-job.org). Production d
 
 - `node frontend/scripts/verify-security.mjs` against the live URL (change `API`/`WS` at the
   top). In particular **R**: 10 failed logins from one machine should 429 while your phone,
-  on another network, can still log in. If everyone shares one bucket, the `TRUST_PROXY`
-  hop count is wrong (ship-plan 0.6).
+  on another network, can still log in. **Found broken on the first deploy** and fixed with
+  `CLIENT_IP_HEADER=cf-connecting-ip`: `TRUST_PROXY=1` alone gave Render's rotating proxy IPs.
+  Also send a fake `CF-Connecting-IP` while blocked: still 429 means Cloudflare overwrote it.
 - The refresh cookie shows `Secure` in the browser's dev tools (it's `NODE_ENV=production`).
 - `/api/docs` is a 404 (Swagger is dev-only).
 

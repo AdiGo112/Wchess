@@ -15,6 +15,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { loggerModule } from './common/logging';
 import { HealthController } from './health.controller';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { clientIp } from './common/http-security';
 
 @Module({
   imports: [
@@ -46,11 +47,14 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
       },
     }),
 
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },
-      { name: 'medium', ttl: 10000, limit: 50 },
-      { name: 'long', ttl: 60000, limit: 300 },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        { name: 'short', ttl: 1000, limit: 10 },
+        { name: 'medium', ttl: 10000, limit: 50 },
+        { name: 'long', ttl: 60000, limit: 300 },
+      ],
+      getTracker: (req) => clientIp(req as Parameters<typeof clientIp>[0]),
+    }),
 
     PrismaModule,
     RedisModule,
