@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const BACKEND = process.env.VITE_PROXY_TARGET || 'http://localhost:3100'
@@ -18,5 +18,8 @@ export default defineConfig({
     },
     // Accept the random hostname a tunnel assigns (e.g. *.trycloudflare.com).
     allowedHosts: true,
+    // The SPA imports the server's pure scoring module (lib/browserAnalysis.ts);
+    // the dev server refuses files outside its root unless listed here.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../backend/src/analysis/classify.ts'] },
   },
 })

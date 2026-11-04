@@ -18,6 +18,7 @@ import Tournaments from "./pages/Tournaments";
 import ProfileEdit from "./pages/ProfileEdit";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
+import PlayComputer from "./pages/PlayComputer";
 
 // The window itself never scrolls: <main> is the scroll container, so a page
 // that fits the viewport (the board pages) scrolls nowhere at all, and every
@@ -60,6 +61,10 @@ export default function App() {
           <Route path="/puzzles" element={<Puzzles />} />
           <Route path="/tournaments" element={<Tournaments />} />
           <Route path="/settings" element={<Settings />} />
+          {/* Practice vs Stockfish: runs entirely in the browser, so no account needed */}
+          <Route path="/play" element={<PlayComputer />} />
+          {/* Public: saved games are public reads, and /review/local is a guest's practice game */}
+          <Route path="/review/:gameId" element={<GameReview />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
@@ -70,7 +75,6 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/edit" element={<ProfileEdit />} />
             <Route path="/history" element={<GameHistory />} />
-            <Route path="/review/:gameId" element={<GameReview />} />
           </Route>
 
           {/* Anything else — a typo or a stale bookmark — rendered a blank

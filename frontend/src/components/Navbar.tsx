@@ -47,7 +47,8 @@ export default function Navbar() {
 
   const navLinks: NavItem[] = [
     { path: "/", label: "Home" },
-    { path: "/lobby", label: "Play" },
+    // Guests go straight to a practice game; the lobby needs an account.
+    { path: user ? "/lobby" : "/play", label: "Play" },
     { path: "/leaderboard", label: "Ranks" },
     { path: "/history", label: "Games" },
     { path: "/puzzles", label: "Puzzles", soon: true },
