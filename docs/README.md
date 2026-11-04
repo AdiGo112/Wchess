@@ -37,7 +37,7 @@ docs/
     └── logging.md         — Pino setup, the event catalogue, what is never logged
 ```
 
-Also live, at the repo root: **`../Diagrams.md`** — 16 Mermaid diagrams (C4
+Also live, in `docs/`: **`Diagrams.md`** — 16 Mermaid diagrams (C4
 L1–L3, every flow, the ER diagram, the Redis keyspace, both deployment
 topologies), each grounded in the real code.
 
@@ -75,6 +75,6 @@ integration branch.
 1. `RESUME.md` — where the code actually is
 2. `CURRENT_SPRINT.md` — what the last session was doing
 3. `architecture/overview.md` — how the system is put together, and why
-4. `../Diagrams.md` — the same thing, drawn
+4. `Diagrams.md` — the same thing, drawn
 5. `architecture/api-reference.md` + `websocket-events.md` — the live contracts
 6. `features/NN-*/START_HERE.md` — only for the feature you are about to touch
