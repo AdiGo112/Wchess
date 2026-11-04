@@ -136,7 +136,7 @@ _Fixed in the pre-Increment-2 hardening pass: unauthenticated `GET /games/histor
 | Pipeline + branch workflow | `docs/infrastructure/ci-cd.md` |
 | Branch-protection wizard | `.github/setup-branch-protection.sh` |
 | System design (start here) | `docs/architecture/overview.md` |
-| All 16 diagrams | `Diagrams.md` (repo root) |
+| All 16 diagrams | `docs/Diagrams.md` |
 | Stockfish WASM hook | `frontend/src/hooks/useStockfish.ts` |
 | Board sizing (both board pages) | `frontend/src/hooks/useBoardFit.ts` |
 | Live verification scripts | `frontend/scripts/verify-*.mjs`, `backend/scripts/verify-*.mjs` |

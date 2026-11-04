@@ -4,7 +4,7 @@
 > any file under `docs/features/**` disagree, this file wins — those folders were
 > written before the v1 scope cut (ADR-0032) and are frozen scaffolding.
 >
-> Diagrams are not repeated here. `../../Diagrams.md` holds all 16 (C4 L1–L3,
+> Diagrams are not repeated here. `../Diagrams.md` holds all 16 (C4 L1–L3,
 > every flow, the ER diagram, the Redis keyspace, both deployment topologies);
 > this file is the prose index to them.
 
@@ -158,7 +158,7 @@ built. Treat it as a sketch of an end state, not a plan of record.
 | What does the API look like? | `api-reference.md` |
 | What socket events exist? | `websocket-events.md` |
 | What does the schema look like? | `database-schema.md` |
-| Show me a flow | `../../Diagrams.md` (16 diagrams, indexed) |
+| Show me a flow | `../Diagrams.md` (16 diagrams, indexed) |
 | Why is it built this way? | `ADR-0032-*.md` here, and the ADRs under `docs/features/NN-*/` |
 | How do I ship a change? | `../infrastructure/ci-cd.md` |
 | What is the state of the code right now? | `../RESUME.md`, `../CURRENT_SPRINT.md` |

@@ -2,7 +2,7 @@
 
 This branch (`plan`) contains no executable code. It exists purely to document what we're building before we build it. All implementation happens on `feature/*` branches off `main`.
 
-The authoritative masterplan is `Here_is_THE_plan.md` at the repo root (2345 lines, produced by Ultraplan).
+The authoritative masterplan is `docs/Here_is_THE_plan.md` (2345 lines, produced by Ultraplan).
 
 ---
 

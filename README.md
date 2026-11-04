@@ -2,6 +2,10 @@
 
 Real-time multiplayer chess with server-side clocks, Glicko-2 ratings and Stockfish game analysis.
 
+**Live:** [wchess.onrender.com](https://wchess.onrender.com) (Render free tier, so the first load can take a while) · **Architecture:** [docs/architecture/overview.md](docs/architecture/overview.md)
+
+<!-- Screenshot: ![WChess game screen](docs/screenshot.png) -->
+
 **Stack:** React + TypeScript, NestJS, PostgreSQL (Prisma), Redis, Socket.io, Stockfish (WASM)
 
 ## Features
@@ -42,6 +46,17 @@ cd frontend && npm test                    # Vitest
 ```
 
 End-to-end checks run against a live stack: `frontend/scripts/verify-*.mjs` and `backend/scripts/verify-*.mjs`.
+
+## Performance
+
+Measured with `frontend/scripts/bench-live.mjs` against the local Docker stack (backend on `:3100`, 5 games, 20 moves), before and after the event-driven clock sweeper ([ADR-0034](docs/architecture/ADR-0034-event-driven-clock-sweeper.md)). Raw results: `bench/results/`.
+
+| | Before (`live-baseline`) | After (`live-event-driven`) |
+| --- | --- | --- |
+| Redis commands per game per minute, nobody moving | 72 | 4 |
+| Socket messages per game per minute, nobody moving | 120 | 0 |
+| Redis commands per move | 5.3 | 5 |
+| Move round-trip latency p50 / p99 | 2.7 / 5.3 ms | 1.8 / 5.2 ms |
 
 ## Docs
 

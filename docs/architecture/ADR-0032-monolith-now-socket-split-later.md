@@ -2,11 +2,11 @@
 
 **Status:** Accepted
 **Date:** 2026-07-19
-**Supersedes:** `Here_is_THE_plan.md` §4 (15-service decomposition)
+**Supersedes:** `../Here_is_THE_plan.md` §4 (15-service decomposition)
 
 ## Context
 
-`Here_is_THE_plan.md` §4 prescribes decomposing the backend into 15 services on ports
+`../Here_is_THE_plan.md` §4 prescribes decomposing the backend into 15 services on ports
 3001–3015. A full read of `backend/src/**` found the actual coupling between the 11 Nest
 modules to be two service dependencies (`games → leaderboard`,
 `matchmaking → games`) plus a shared `JwtAuthGuard`. At 105 tracked files, the monolith
